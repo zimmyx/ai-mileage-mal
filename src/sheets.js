@@ -4,7 +4,7 @@ const dotenv = require('dotenv');
 
 dotenv.config();
 
-const MILEAGE_HEADERS = ['Date', 'Destination', 'Odo Start', 'Odo End', 'Distance (km)', 'Claim (RM)', 'Logged At'];
+const MILEAGE_HEADERS = ['Date', 'Week', 'Destination', 'Odo Start', 'Odo End', 'Distance (km)', 'Claim (RM)', 'Logged At'];
 
 function getAuth() {
     return new JWT({
@@ -26,9 +26,19 @@ async function getSheet() {
     return sheet;
 }
 
+// Helper to get week number
+function getWeekNumber(d) {
+    const date = new Date(d);
+    date.setHours(0, 0, 0, 0);
+    date.setDate(date.getDate() + 4 - (date.getDay() || 7));
+    const yearStart = new Date(date.getFullYear(), 0, 1);
+    const weekNo = Math.ceil((((date - yearStart) / 86400000) + 1) / 7);
+    return `Week ${weekNo}`;
+}
+
 async function logMileage(data) {
     const sheet = await getSheet();
-    const rate = parseFloat(process.env.MILEAGE_RATE) || 0.55; // Default to 0.55 as requested
+    const rate = parseFloat(process.env.MILEAGE_RATE) || 0.55;
     
     let distance = data.distance;
     if (data.odoStart && data.odoEnd) {
@@ -36,9 +46,11 @@ async function logMileage(data) {
     }
 
     const claim = distance * rate;
+    const dateStr = data.date || new Date().toISOString().split('T')[0];
     
     await sheet.addRow({
-        'Date': data.date || new Date().toISOString().split('T')[0],
+        'Date': dateStr,
+        'Week': getWeekNumber(dateStr),
         'Destination': data.destination || 'Unknown',
         'Odo Start': data.odoStart || '',
         'Odo End': data.odoEnd || '',
@@ -50,20 +62,38 @@ async function logMileage(data) {
     return { distance, claim };
 }
 
-async function getMileageSummary() {
+async function getWeeklySummary() {
     const sheet = await getSheet();
     const rows = await sheet.getRows();
     const now = new Date();
+    const currentWeek = getWeekNumber(now);
     
-    const thisMonthRows = rows.filter(r => {
-        const d = new Date(r.get('Date'));
-        return d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear();
-    });
+    const weeklyRows = rows.filter(r => r.get('Week') === currentWeek);
 
-    const totalKm = thisMonthRows.reduce((sum, r) => sum + (parseFloat(r.get('Distance (km)')) || 0), 0);
-    const totalClaim = thisMonthRows.reduce((sum, r) => sum + (parseFloat(r.get('Claim (RM)')) || 0), 0);
+    const totalKm = weeklyRows.reduce((sum, r) => sum + (parseFloat(r.get('Distance (km)')) || 0), 0);
+    const totalClaim = weeklyRows.reduce((sum, r) => sum + (parseFloat(r.get('Claim (RM)')) || 0), 0);
     
-    return { totalKm, totalClaim, count: thisMonthRows.length };
+    return { totalKm, totalClaim, count: weeklyRows.length, week: currentWeek };
 }
 
-module.exports = { logMileage, getMileageSummary };
+async function getMonthlyReport() {
+    const sheet = await getSheet();
+    const rows = await sheet.getRows();
+    const now = new Date();
+    const currentMonth = now.getMonth();
+    
+    const monthlyRows = rows.filter(r => new Date(r.get('Date')).getMonth() === currentMonth);
+    
+    // Group by week
+    const weeks = {};
+    monthlyRows.forEach(r => {
+        const w = r.get('Week');
+        if (!weeks[w]) weeks[w] = { km: 0, rm: 0 };
+        weeks[w].km += parseFloat(r.get('Distance (km)')) || 0;
+        weeks[w].rm += parseFloat(r.get('Claim (RM)')) || 0;
+    });
+
+    return weeks;
+}
+
+module.exports = { logMileage, getWeeklySummary, getMonthlyReport };

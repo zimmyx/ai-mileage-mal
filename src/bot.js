@@ -1,6 +1,6 @@
 const { Telegraf } = require('telegraf');
 const { processMileage } = require('./ai');
-const { logMileage, getMileageSummary } = require('./sheets');
+const { logMileage, getMileageSummary, getWeeklySummary, getMonthlyReport } = require('./sheets');
 const dotenv = require('dotenv');
 
 dotenv.config();
@@ -36,29 +36,56 @@ bot.command('rate', (ctx) => {
 });
 
 async function handleIncoming(ctx, input, type) {
-    const msg = await ctx.reply('⏳ Memproses Odo...');
-    const data = await processMileage(input, type);
+    const msg = await ctx.reply('⏳ Memproses Batch Mileage...');
+    const results = await processMileage(input, type);
     
-    if (data && (data.distance || (data.odoStart && data.odoEnd))) {
-        const result = await logMileage(data);
-        let odoInfo = '';
-        if (data.odoStart && data.odoEnd) {
-            odoInfo = `🔢 Odo: *${data.odoStart} → ${data.odoEnd}*\n`;
+    if (results && results.length > 0) {
+        let successCount = 0;
+        for (const data of results) {
+            if (data.distance || (data.odoStart && data.odoEnd)) {
+                await logMileage(data);
+                successCount++;
+            }
         }
 
-        await ctx.telegram.editMessageText(ctx.chat.id, msg.message_id, null, 
-            `✅ *Mileage Direkod!*\n\n` +
-            `📍 Destinasi: *${data.destination}*\n` +
-            odoInfo +
-            `🛣️ Jarak: *${result.distance} km*\n` +
-            `💵 Claim: *RM ${result.claim.toFixed(2)}*\n\n` +
-            `🟢 _Berjaya disimpan ke Google Sheet!_`, 
-            { parse_mode: 'Markdown' }
-        );
+        const summary = results.length > 1 
+            ? `✅ *Batch Berjaya!* \n📦 *${successCount}* rekod telah disimpan ke Google Sheet.`
+            : `✅ *Mileage Direkod!* \n📍 Destinasi: *${results[0].destination}*\n🛣️ Jarak: *${(results[0].odoEnd - results[0].odoStart) || results[0].distance} km*`;
+
+        await ctx.telegram.editMessageText(ctx.chat.id, msg.message_id, null, summary, { parse_mode: 'Markdown' });
     } else {
-        await ctx.telegram.editMessageText(ctx.chat.id, msg.message_id, null, '❌ Gagal membaca Odo/jarak. Sila cuba lagi.');
+        await ctx.telegram.editMessageText(ctx.chat.id, msg.message_id, null, '❌ Gagal membaca format. Sila pastikan tarikh dan odo jelas.');
     }
 }
+
+bot.command('weekly', async (ctx) => {
+    const summary = await getWeeklySummary();
+    ctx.reply(
+        `📅 *Ringkasan ${summary.week}:*\n\n` +
+        `🛣️ Total Jarak: *${summary.totalKm.toFixed(1)} km*\n` +
+        `💵 Total Claim: *RM ${summary.totalClaim.toFixed(2)}*\n` +
+        `✅ Jumlah Rekod: *${summary.count}*`,
+        { parse_mode: 'Markdown' }
+    );
+});
+
+bot.command('report', async (ctx) => {
+    const report = await getMonthlyReport();
+    let msg = `📊 *Laporan Mileage Bulanan (Ikut Minggu):*\n\n`;
+    
+    Object.keys(report).sort().forEach(w => {
+        msg += `🔹 *${w}*\n   Jarak: ${report[w].km.toFixed(1)} km\n   Claim: RM ${report[w].rm.toFixed(2)}\n\n`;
+    });
+
+    if (Object.keys(report).length === 0) msg = "❌ Tiada data untuk bulan ini.";
+    ctx.reply(msg, { parse_mode: 'Markdown' });
+});
+
+// Friday Night Reminder (9 PM)
+const cron = require('node-cron');
+cron.schedule('0 21 * * 5', () => {
+    bot.telegram.sendMessage(process.env.MY_CHAT_ID, '🔔 *Peringatan Jumaat Malam!*\n\nBos, jangan lupa masukkan rekod odo untuk minggu ni supaya tak terlepas claim! 🚗💨', { parse_mode: 'Markdown' });
+}, { timezone: "Asia/Kuala_Lumpur" });
 
 bot.on('text', ctx => handleIncoming(ctx, ctx.message.text, 'text'));
 bot.on('voice', async (ctx) => {
