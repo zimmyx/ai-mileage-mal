@@ -2,27 +2,31 @@ const { bot } = require('./src/bot');
 const http = require('http');
 
 const PORT = process.env.PORT || 8080;
-const RENDER_URL = process.env.RENDER_EXTERNAL_URL; 
+const RENDER_URL = process.env.RENDER_EXTERNAL_URL;
 
-// 1. Health Check & Webhook Handler
 const server = http.createServer((req, res) => {
-    if (req.url === '/health' || req.url === '/ping') {
-        res.writeHead(200);
-        res.end('OK');
-    } else {
+    // Better Health Check
+    if (req.method === 'GET' && (req.url === '/' || req.url === '/health' || req.url === '/ping')) {
+        res.writeHead(200, { 'Content-Type': 'text/plain' });
+        res.end('AI Mileage Bot is Online and Healthy 🚀');
+        return;
+    }
+
+    if (req.method === 'POST') {
         bot.webhookCallback('/')(req, res);
+    } else {
+        res.writeHead(404);
+        res.end();
     }
 });
 
 if (RENDER_URL) {
-    // PRODUCTION: Webhook mode (Render)
     console.log(`🚀 AI Mileage starting in WEBHOOK mode on ${RENDER_URL}`);
     bot.telegram.setWebhook(`${RENDER_URL}/`);
     server.listen(PORT, () => {
         console.log(`✨ Mileage Bot is listening on port ${PORT}`);
     });
 } else {
-    // DEVELOPMENT: Polling mode (Local)
     console.log('🚀 AI Mileage starting in POLLING mode...');
     bot.launch()
         .then(() => console.log('✨ Mileage Bot is online (Polling)!'))
@@ -31,7 +35,6 @@ if (RENDER_URL) {
     server.listen(PORT);
 }
 
-// Enable graceful stop
 process.once('SIGINT', () => {
     bot.stop('SIGINT');
     server.close();
