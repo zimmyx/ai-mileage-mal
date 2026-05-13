@@ -8,7 +8,11 @@ const {
     getTodaySummary,
     deleteLastRecord,
     deleteRecordByRow,
-    logError
+    editLastRecord,
+    logError,
+    enrichWithOdoMemory,
+    findDuplicate,
+    hasRecordsThisWeek
 } = require('./sheets');
 const { generatePDF } = require('./export');
 const dotenv = require('dotenv');
@@ -50,6 +54,7 @@ bot.start((ctx) => {
         '🗓️ /today — Lihat total hari ini\n' +
         '🧾 /report — Laporan bulanan ikut minggu\n' +
         '📤 /export — Export laporan PDF\n' +
+        '✏️ /editlast — Edit rekod terakhir\n' +
         '🗑️ /undo — Padam rekod terakhir\n' +
         '⚙️ /rate — Cek kadar claim per km\n' +
         '❓ /help — Panduan format input\n' +
@@ -73,6 +78,8 @@ bot.command('help', (ctx) => {
         '• Bot faham Bahasa Melayu, English, dan Manglish\n' +
         '• Jika tiada tarikh, bot guna tarikh hari ini\n' +
         '• Boleh sebut lokasi seperti Spg 3, Spg 4, JKR, client site\n' +
+        '• Odo memory: jika pernah simpan odo end, anda boleh taip `KLCC odo 12080`\n' +
+        '• Edit last: `/editlast distance 35` atau `/editlast destination KLCC`\n' +
         '• Bot akan minta confirmation sebelum simpan',
         { parse_mode: 'Markdown' }
     );
@@ -179,6 +186,45 @@ bot.command('delete', async (ctx) => {
     }
 });
 
+bot.command('editlast', async (ctx) => {
+    const parts = ctx.message.text.split(' ');
+    if (parts.length < 3) {
+        await ctx.reply(
+            '❌ Format salah. Guna:\n\n' +
+            '`/editlast distance 35`\n' +
+            '`/editlast destination KLCC`\n' +
+            '`/editlast date 2026-05-13`\n' +
+            '`/editlast odoend 12080`',
+            { parse_mode: 'Markdown' }
+        );
+        return;
+    }
+
+    const field = parts[1].toLowerCase();
+    const value = parts.slice(2).join(' ');
+
+    try {
+        const updated = await editLastRecord(field, value);
+        if (!updated) {
+            await ctx.reply('❌ Tiada rekod untuk diedit.');
+            return;
+        }
+        await ctx.reply(
+            `✅ *Rekod Terakhir Dikemaskini*\n\n` +
+            `✏️ Field: *${field}*\n` +
+            `🆕 Value: *${value}*\n` +
+            `📍 Destinasi: *${updated.destination}*\n` +
+            `🛣️ Jarak: *${updated.distance} km*\n` +
+            `💵 Claim: *RM ${updated.claim}*`,
+            { parse_mode: 'Markdown' }
+        );
+    } catch (err) {
+        console.error('Edit Last Error:', err.message);
+        await logError('editlast', err.message);
+        await ctx.reply('❌ Gagal edit rekod. Field dibenarkan: distance, destination, date, odostart, odoend.');
+    }
+});
+
 bot.command('export', async (ctx) => {
     try {
         const msg = await ctx.reply('⏳ Menjana laporan PDF...');
@@ -217,7 +263,11 @@ async function handleIncoming(ctx, input, type) {
         if (results && results.length > 0) {
             // Validate results
             const validResults = [];
-            for (const data of results) {
+            for (const rawData of results) {
+                const data = await enrichWithOdoMemory(rawData);
+                const duplicate = await findDuplicate(data);
+                if (duplicate) data._duplicateWarning = true;
+
                 // Validation
                 if (!data.destination || data.destination.trim() === '') {
                     await ctx.telegram.editMessageText(
@@ -274,6 +324,9 @@ async function handleIncoming(ctx, input, type) {
             // Build confirmation message
             const rate = parseFloat(process.env.MILEAGE_RATE) || 0.60;
             let confirmMsg = '📋 *Sila Confirm Rekod Mileage:*\n\n';
+            if (validResults.some(d => d._duplicateWarning)) {
+                confirmMsg += '⚠️ *Warning:* Ada rekod yang nampak duplicate dengan data sedia ada. Semak sebelum confirm.\n\n';
+            }
             
             validResults.forEach((data, idx) => {
                 let distance = data.distance;
@@ -286,6 +339,9 @@ async function handleIncoming(ctx, input, type) {
                 confirmMsg += `   📍 ${data.destination}\n`;
                 if (data.odoStart != null && data.odoEnd != null) {
                     confirmMsg += `   🔢 Odo: ${data.odoStart} → ${data.odoEnd}\n`;
+                }
+                if (data._duplicateWarning) {
+                    confirmMsg += `   ⚠️ Possible duplicate\n`;
                 }
                 confirmMsg += `   🛣️ ${distance.toFixed(1)} km\n`;
                 confirmMsg += `   💵 RM ${claim.toFixed(2)}\n\n`;
@@ -423,7 +479,12 @@ cron.schedule('0 21 * * 5', async () => {
     }
 
     try {
-        await bot.telegram.sendMessage(process.env.MY_CHAT_ID, '🔔 *Peringatan Jumaat Malam!*\n\nBos, jangan lupa masukkan rekod odo untuk minggu ni supaya tak terlepas claim! 🚗💨', { parse_mode: 'Markdown' });
+        const alreadyLogged = await hasRecordsThisWeek();
+        if (alreadyLogged) {
+            console.log('Friday reminder skipped: weekly mileage already logged.');
+            return;
+        }
+        await bot.telegram.sendMessage(process.env.MY_CHAT_ID, '🔔 *Peringatan Jumaat Malam!*\n\nMinggu ni belum ada rekod mileage. Jangan lupa masukkan odo/trip supaya tak terlepas claim! 🚗💨', { parse_mode: 'Markdown' });
     } catch (err) {
         console.error('Friday Reminder Error:', err.message);
         await logError('friday_reminder', err.message);

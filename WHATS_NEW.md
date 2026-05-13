@@ -1,5 +1,35 @@
 # What's New - AI Mileage Bot
 
+## Latest Update 2
+
+### Personal-use Improvements
+- Added odometer memory: if a new input only has `odoEnd`, bot can use the previous `Odo End` as the new `Odo Start`.
+- Added duplicate detection before saving.
+- Added `/editlast` command for quick correction of the latest record.
+- Improved PDF claim report with name, rate, signature, and approval section.
+- Friday reminder is now smart: it only reminds if there is no mileage record for the current week.
+
+### Smarter Free Parsing
+- Added a free local parser before AI fallback.
+- Simple inputs like `Office ke KLCC 30km`, `JKR 12000-12045`, and `KLCC odo 12080` can be parsed without calling AI.
+- OpenRouter free models are kept as fallback only when local parser cannot understand the input.
+
+### New Command
+
+#### `/editlast <field> <value>`
+Edits the latest mileage record.
+
+Examples:
+
+```txt
+/editlast distance 35
+/editlast destination KLCC
+/editlast date 2026-05-13
+/editlast odoend 12080
+```
+
+---
+
 ## Latest Update
 
 ### Safety & Access Control

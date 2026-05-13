@@ -67,6 +67,7 @@ const commands = [
     { command: 'weekly', description: 'Ringkasan minggu ini' },
     { command: 'report', description: 'Laporan bulanan ikut minggu' },
     { command: 'export', description: 'Export laporan PDF' },
+    { command: 'editlast', description: 'Edit rekod terakhir' },
     { command: 'undo', description: 'Padam rekod terakhir' },
     { command: 'delete', description: 'Padam rekod ikut row number' },
     { command: 'rate', description: 'Check kadar claim per km' }

@@ -7,9 +7,101 @@ const OPENROUTER_API_KEY = process.env.OPENROUTER_API_KEY;
 const AI_MODELS = [
     'qwen/qwen3-next-80b-a3b-instruct:free',
     'meta-llama/llama-3.3-70b-instruct:free',
-    'nvidia/nemotron-3-nano-30b-a3b:free',
-    'google/gemini-2.0-flash-001'
+    'nvidia/nemotron-3-nano-30b-a3b:free'
 ];
+
+function getToday() {
+    return new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kuala_Lumpur' });
+}
+
+function normalizeDate(raw) {
+    if (!raw) return null;
+    const today = getToday();
+    const lower = raw.toLowerCase();
+    if (/hari ini|today/.test(lower)) return today;
+    if (/semalam|yesterday/.test(lower)) {
+        const d = new Date();
+        d.setDate(d.getDate() - 1);
+        return d.toLocaleDateString('en-CA', { timeZone: 'Asia/Kuala_Lumpur' });
+    }
+
+    const m = raw.match(/(\d{1,2})[\/-](\d{1,2})(?:[\/-](\d{2,4}))?/);
+    if (!m) return null;
+
+    const day = String(Number(m[1])).padStart(2, '0');
+    const month = String(Number(m[2])).padStart(2, '0');
+    let year = m[3] ? Number(m[3]) : new Date().getFullYear();
+    if (year < 100) year += 2000;
+    return `${year}-${month}-${day}`;
+}
+
+function cleanDestination(text) {
+    return text
+        .replace(/\b(hari ini|today|semalam|yesterday)\b/gi, '')
+        .replace(/(^|\s)\d{1,2}[\/-]\d{1,2}(?:[\/-]\d{2,4})?(?=\s|$)/g, ' ')
+        .replace(/\b(?:odo|odometer|meter)\b\s*\d+(?:\s*(?:-|ke|to|hingga|sampai|→)\s*\d+)?/gi, '')
+        .replace(/\d{4,7}\s*(?:-|–|—|ke|to|hingga|sampai|→)\s*\d{4,7}/gi, '')
+        .replace(/\b\d+(?:\.\d+)?\s*(?:km|kilometer|kilometre)\b/gi, '')
+        .replace(/\b(?:pergi|ke|dari|from|to)\b\s*$/gi, '')
+        .replace(/\s+/g, ' ')
+        .replace(/^[-–:,.\s]+|[-–:,.\s]+$/g, '')
+        .trim();
+}
+
+function parseLine(line) {
+    const original = line.trim();
+    if (!original) return null;
+
+    const date = normalizeDate(original) || getToday();
+
+    const odoMatch = original.match(/(?:odo|odometer|meter)?\s*(\d{4,7})\s*(?:-|ke|to|hingga|sampai|→)\s*(\d{4,7})/i);
+    const singleOdoMatch = original.match(/(?:odo|odometer|meter)\s*(?:end|akhir)?\s*(\d{4,7})/i);
+    const distanceMatch = original.match(/(\d+(?:\.\d+)?)\s*(?:km|kilometer|kilometre)\b/i);
+
+    let odoStart = null;
+    let odoEnd = null;
+    let distance = null;
+
+    if (odoMatch) {
+        odoStart = Number(odoMatch[1]);
+        odoEnd = Number(odoMatch[2]);
+    } else if (singleOdoMatch) {
+        odoEnd = Number(singleOdoMatch[1]);
+    }
+
+    if (distanceMatch) {
+        distance = Number(distanceMatch[1]);
+    }
+
+    const destination = cleanDestination(original) || 'Unknown';
+
+    if (!distance && !odoEnd && !odoStart) return null;
+
+    return { date, odoStart, odoEnd, destination, distance };
+}
+
+function parseLocal(input) {
+    const normalized = String(input || '').trim();
+    if (!normalized) return null;
+
+    const lines = normalized
+        .split(/\n|;/)
+        .map(l => l.trim())
+        .filter(Boolean);
+
+    const parsed = [];
+
+    for (const line of lines.length ? lines : [normalized]) {
+        const result = parseLine(line);
+        if (result) parsed.push(result);
+    }
+
+    if (parsed.length > 0) return parsed;
+
+    // Try whole input as one trip when multi-line notes contain one distance/odo.
+    const whole = parseLine(normalized.replace(/\n/g, ' '));
+    return whole ? [whole] : null;
+}
 
 function extractJsonArray(text) {
     if (!text) return null;
@@ -27,7 +119,7 @@ async function callAI(model, content) {
     const res = await axios.post('https://openrouter.ai/api/v1/chat/completions', {
         model,
         messages: [{ role: 'user', content }],
-        temperature: 0.1
+        temperature: 0
     }, {
         headers: {
             'Authorization': `Bearer ${OPENROUTER_API_KEY}`,
@@ -47,10 +139,6 @@ async function callAI(model, content) {
 }
 
 async function processMileage(input, type = 'text') {
-    if (!OPENROUTER_API_KEY) {
-        throw new Error('OPENROUTER_API_KEY is not configured');
-    }
-
     if (type !== 'text') {
         throw new Error(`Unsupported input type: ${type}`);
     }
@@ -60,32 +148,29 @@ async function processMileage(input, type = 'text') {
         throw new Error('Mileage input is empty');
     }
 
-    const today = new Date().toISOString().split('T')[0];
-    const prompt = `Act as an expert mileage tracking assistant for a TRAFFIC LIGHT TECH SUPPORT specialist.
-The user visits many junctions (Spg 3, Spg 4), traffic light sites, client places, and JKR offices for technical work.
+    const localResult = parseLocal(normalizedInput);
+    if (Array.isArray(localResult) && localResult.length > 0) {
+        console.log('Using free local mileage parser');
+        return localResult;
+    }
 
-TODAY'S DATE: ${today}
+    if (!OPENROUTER_API_KEY) {
+        throw new Error('OPENROUTER_API_KEY is not configured and local parser could not parse input');
+    }
 
-Extract MULTIPLE trips into a MINIFIED JSON ARRAY.
+    const today = getToday();
+    const prompt = `Act as an expert free mileage parser for a Malaysian traffic light technical support worker.
+TODAY: ${today}
 
-FOR EACH TRIP:
-- date: YYYY-MM-DD (use ${today} if user says "today", "hari ini", or no date mentioned)
-- odoStart: Starting odometer number, or null if not provided
-- odoEnd: Ending odometer number, or null if not provided
-- destination: Detailed junctions/locations/client/office names
-- distance: km if odo not provided, or null if not provided
+Extract trips into minified JSON array only.
+Fields: date YYYY-MM-DD, odoStart number/null, odoEnd number/null, destination string, distance number/null.
+Understand Malay, English, Manglish, short notes, odometer notes, places like JKR, SPG, simpang, site, client, office.
+If only one final odometer is given, put it in odoEnd and odoStart null.
+Use ${today} if no date.
+Never invent distance or odo.
+Return JSON array only.`;
 
-Rules:
-- Understand Malay, English, Manglish, short notes, and long sentences.
-- Treat each date block as one trip record when one odometer range is provided for that date.
-- Keep destinations/tasks only from the same date block. Never copy destinations from another date.
-- Preserve all work/location lines in the same date block by joining them with semicolons.
-- If the user gives multiple places/trips under one date with one odometer range, keep them as one trip unless separate odometer ranges or distances are clear.
-- If a date looks unusual but is explicitly written, use the written date and do not silently change it.
-- Do not invent distance or odometer values.
-- Respond ONLY with the JSON array. No markdown, no backticks.`;
-
-    const content = `${prompt}\n\nInput: "${normalizedInput}"`;
+    const content = `${prompt}\n\nInput: ${JSON.stringify(normalizedInput)}`;
 
     for (const model of AI_MODELS) {
         try {
@@ -100,4 +185,4 @@ Rules:
     return null;
 }
 
-module.exports = { processMileage };
+module.exports = { processMileage, parseLocal };
