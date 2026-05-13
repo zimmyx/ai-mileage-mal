@@ -335,8 +335,11 @@ async function handleIncoming(ctx, input, type) {
                 }
                 const claim = distance * rate;
                 
+                const shortDestination = String(data.destination || '').length > 90
+                    ? String(data.destination).slice(0, 87) + '...'
+                    : String(data.destination || 'Unknown');
                 confirmMsg += `*${idx + 1}.* ${data.date || 'Hari ini'}\n`;
-                confirmMsg += `   📍 ${data.destination}\n`;
+                confirmMsg += `   📍 ${shortDestination}\n`;
                 if (data.odoStart != null && data.odoEnd != null) {
                     confirmMsg += `   🔢 Odo: ${data.odoStart} → ${data.odoEnd}\n`;
                 }
@@ -357,6 +360,13 @@ async function handleIncoming(ctx, input, type) {
             const totalClaim = totalKm * rate;
 
             confirmMsg += `*Total:* ${totalKm.toFixed(1)} km | RM ${totalClaim.toFixed(2)}`;
+
+            if (confirmMsg.length > 3800) {
+                confirmMsg = '📋 *Sila Confirm Rekod Mileage:*\n\n' +
+                    `Bot berjaya baca *${validResults.length} rekod*.\n` +
+                    `Total: *${totalKm.toFixed(1)} km* | *RM ${totalClaim.toFixed(2)}*\n\n` +
+                    'Nota: Detail terlalu panjang untuk Telegram, tapi semua rekod akan disimpan ikut date/odo/destinasi yang dibaca. Gunakan /export selepas simpan untuk semak PDF.';
+            }
 
             await ctx.telegram.editMessageText(
                 ctx.chat.id,
