@@ -414,11 +414,35 @@ bot.on('callback_query', async (ctx) => {
             saved = true;
             pendingConfirmations.delete(confirmId);
         } catch (err) {
-            console.error('Confirm Save Error:', err.message, err.stack);
-            try { await logError('confirm_save', err.stack || err.message); } catch (_) {}
-            try { await ctx.answerCbQuery('❌ Error simpan'); } catch (_) {}
-            try { await ctx.editMessageText(`❌ Ada error masa simpan.\n\nDetail: ${String(err.message).slice(0, 300)}`); } catch (_) {
-                try { await ctx.reply(`❌ Ada error masa simpan.\n\nDetail: ${String(err.message).slice(0, 300)}`); } catch (_) {}
+            console.error('=== CONFIRM SAVE ERROR ===');
+            console.error('Error name:', err.name);
+            console.error('Error message:', err.message);
+            console.error('Error stack:', err.stack);
+            console.error('Results count:', results.length);
+            console.error('First result:', JSON.stringify(results[0]));
+            console.error('========================');
+            
+            try { await logError('confirm_save', err.stack || err.message); } catch (logErr) {
+                console.error('logError failed:', logErr.message);
+            }
+            
+            const errorDetail = `${err.name || 'Error'}: ${String(err.message).slice(0, 200)}`;
+            
+            try {
+                await ctx.answerCbQuery('❌ Error simpan');
+            } catch (cbErr) {
+                console.error('answerCbQuery failed:', cbErr.message);
+            }
+            
+            try {
+                await ctx.editMessageText(`❌ Ada error masa simpan.\n\n${errorDetail}`);
+            } catch (editErr) {
+                console.error('editMessageText failed:', editErr.message);
+                try {
+                    await ctx.reply(`❌ Ada error masa simpan.\n\n${errorDetail}`);
+                } catch (replyErr) {
+                    console.error('reply fallback failed:', replyErr.message);
+                }
             }
             return;
         }

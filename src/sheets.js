@@ -14,12 +14,34 @@ function getRequiredEnv(name) {
 }
 
 function getAuth() {
-    const rawKey = getRequiredEnv('GOOGLE_PRIVATE_KEY');
-    // Handle both literal \n (from Render dashboard) and already-parsed newlines (from dotenv)
-    const key = rawKey.includes('\\n') ? rawKey.replace(/\\n/g, '\n') : rawKey;
+    let rawKey = getRequiredEnv('GOOGLE_PRIVATE_KEY');
+    
+    // Handle various key formats:
+    // 1. Literal \n strings (from Render dashboard copy-paste)
+    if (rawKey.includes('\\n')) {
+        rawKey = rawKey.replace(/\\n/g, '\n');
+    }
+    
+    // 2. Remove any extra quotes that might have been added
+    rawKey = rawKey.replace(/^["']|["']$/g, '');
+    
+    // 3. Normalize line endings (CRLF -> LF)
+    rawKey = rawKey.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
+    
+    // 4. Ensure proper PEM format with newlines
+    if (!rawKey.includes('\n') && rawKey.includes('-----BEGIN')) {
+        // Key is all on one line, need to add newlines
+        rawKey = rawKey
+            .replace('-----BEGIN PRIVATE KEY-----', '-----BEGIN PRIVATE KEY-----\n')
+            .replace('-----END PRIVATE KEY-----', '\n-----END PRIVATE KEY-----')
+            .replace(/(.{64})/g, '$1\n')  // Add newline every 64 chars
+            .replace(/\n+/g, '\n')  // Remove duplicate newlines
+            .trim();
+    }
+    
     return new JWT({
         email: getRequiredEnv('GOOGLE_SERVICE_ACCOUNT_EMAIL'),
-        key,
+        key: rawKey,
         scopes: ['https://www.googleapis.com/auth/spreadsheets'],
     });
 }
