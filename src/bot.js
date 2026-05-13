@@ -44,6 +44,12 @@ bot.use(async (ctx, next) => {
 // Pending confirmations storage
 const pendingConfirmations = new Map();
 
+function escapeMarkdown(text) {
+    return String(text ?? '')
+        .replace(/\\/g, '\\\\')
+        .replace(/([_*`\[])/g, '\\$1');
+}
+
 bot.start((ctx) => {
     ctx.reply(
         '🚗 *AI Mileage by Mal*\n' +
@@ -314,11 +320,12 @@ async function handleIncoming(ctx, input, type) {
                 const distance = data._calculatedDistance || 0;
                 const claim = distance * rate;
                 
-                const shortDestination = String(data.destination || '').length > 90
-                    ? String(data.destination).slice(0, 87) + '...'
-                    : String(data.destination || 'Unknown');
+                const rawDest = String(data.destination || 'Unknown');
+                const shortDestination = rawDest.length > 90
+                    ? rawDest.slice(0, 87) + '...'
+                    : rawDest;
                 confirmMsg += `*${idx + 1}.* ${data.date || 'Hari ini'}\n`;
-                confirmMsg += `   📍 ${shortDestination}\n`;
+                confirmMsg += `   📍 ${escapeMarkdown(shortDestination)}\n`;
                 if (data.odoStart != null && data.odoEnd != null) {
                     confirmMsg += `   🔢 Odo: ${data.odoStart} → ${data.odoEnd}\n`;
                 }
@@ -394,28 +401,43 @@ bot.on('callback_query', async (ctx) => {
             return;
         }
 
+        let saved = false;
+        let successCount = 0;
+
         try {
-            let successCount = 0;
             if (results.length > 1) {
                 successCount = await logMileageBatch(results);
             } else {
                 await logMileage(results[0]);
                 successCount = 1;
             }
-
+            saved = true;
             pendingConfirmations.delete(confirmId);
+        } catch (err) {
+            console.error('Confirm Save Error:', err.message);
+            await logError('confirm_save', err.stack || err.message);
+            await ctx.answerCbQuery('❌ Error simpan');
+            await ctx.editMessageText(`❌ Ada error masa simpan.\n\nDetail: ${String(err.message).slice(0, 300)}`);
+            return;
+        }
 
-            const summary = results.length > 1
-                ? `✅ *Batch Berjaya!*\n📦 *${successCount}* rekod telah disimpan ke Google Sheet.`
-                : `✅ *Mileage Direkod!*\n📍 Destinasi: *${results[0].destination}*`;
+        const summary = results.length > 1
+            ? `✅ *Batch Berjaya!*\n📦 *${successCount}* rekod telah disimpan ke Google Sheet.`
+            : `✅ *Mileage Direkod!*\n📍 Destinasi: *${escapeMarkdown(results[0].destination)}*`;
 
+        try {
             await ctx.answerCbQuery('✅ Berjaya disimpan!');
             await ctx.editMessageText(summary, { parse_mode: 'Markdown' });
         } catch (err) {
-            console.error('Confirm Error:', err.message);
-            await logError('confirm', err.message);
-            await ctx.answerCbQuery('❌ Error');
-            await ctx.editMessageText('❌ Ada error masa simpan. Sila cuba lagi nanti.');
+            console.error('Confirm Telegram Reply Error:', err.message);
+            await logError('confirm_reply', err.stack || err.message);
+            if (saved) {
+                try {
+                    await ctx.reply('✅ Rekod berjaya disimpan ke Google Sheet.');
+                } catch (replyErr) {
+                    console.error('Fallback Reply Error:', replyErr.message);
+                }
+            }
         }
     }
 });
