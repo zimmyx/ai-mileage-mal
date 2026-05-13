@@ -14,9 +14,12 @@ function getRequiredEnv(name) {
 }
 
 function getAuth() {
+    const rawKey = getRequiredEnv('GOOGLE_PRIVATE_KEY');
+    // Handle both literal \n (from Render dashboard) and already-parsed newlines (from dotenv)
+    const key = rawKey.includes('\\n') ? rawKey.replace(/\\n/g, '\n') : rawKey;
     return new JWT({
         email: getRequiredEnv('GOOGLE_SERVICE_ACCOUNT_EMAIL'),
-        key: getRequiredEnv('GOOGLE_PRIVATE_KEY').replace(/\n/g, '\n'),
+        key,
         scopes: ['https://www.googleapis.com/auth/spreadsheets'],
     });
 }
