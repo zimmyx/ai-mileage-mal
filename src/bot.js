@@ -263,58 +263,39 @@ async function handleIncoming(ctx, input, type) {
         if (results && results.length > 0) {
             // Validate results
             const validResults = [];
+            const shouldCheckDuplicate = results.length <= 5;
+            const shouldEnrichOdo = results.length <= 5;
             for (const rawData of results) {
-                const data = await enrichWithOdoMemory(rawData);
-                const duplicate = await findDuplicate(data);
-                if (duplicate) data._duplicateWarning = true;
+                let data = rawData;
+                if (shouldEnrichOdo) {
+                    try { data = await enrichWithOdoMemory(rawData); } catch (e) { /* skip */ }
+                }
+                if (shouldCheckDuplicate) {
+                    try {
+                        const duplicate = await findDuplicate(data);
+                        if (duplicate) data._duplicateWarning = true;
+                    } catch (dupErr) { /* skip */ }
+                }
 
                 // Validation
-                if (!data.destination || data.destination.trim() === '') {
-                    await ctx.telegram.editMessageText(
-                        ctx.chat.id, 
-                        msg.message_id, 
-                        null, 
-                        '❌ Destinasi tidak boleh kosong. Sila cuba lagi.'
-                    );
-                    return;
-                }
+                if (!data.destination || data.destination.trim() === '') continue;
 
-                let distance = data.distance;
+                let distance = Number(data.distance) || 0;
                 if (data.odoStart != null && data.odoEnd != null) {
                     distance = Math.abs(Number(data.odoEnd) - Number(data.odoStart));
-                    
-                    if (Number(data.odoEnd) < Number(data.odoStart)) {
-                        await ctx.telegram.editMessageText(
-                            ctx.chat.id, 
-                            msg.message_id, 
-                            null, 
-                            '❌ Odo End tidak boleh lebih kecil dari Odo Start. Sila semak semula.'
-                        );
-                        return;
-                    }
+                    if (Number(data.odoEnd) < Number(data.odoStart)) continue;
                 }
 
-                if (distance > 1000) {
-                    await ctx.telegram.editMessageText(
-                        ctx.chat.id, 
-                        msg.message_id, 
-                        null, 
-                        `❌ Jarak terlalu besar (${distance} km). Maksimum 1000km. Sila semak semula.`
-                    );
-                    return;
-                }
+                if (distance > 1000) continue;
+                if (distance <= 0) continue;
 
-                if (distance <= 0) {
-                    await ctx.telegram.editMessageText(
-                        ctx.chat.id, 
-                        msg.message_id, 
-                        null, 
-                        '❌ Jarak mesti lebih besar dari 0. Sila cuba lagi.'
-                    );
-                    return;
-                }
-
+                data._calculatedDistance = distance;
                 validResults.push(data);
+            }
+
+            if (validResults.length === 0) {
+                await ctx.telegram.editMessageText(ctx.chat.id, msg.message_id, null, '❌ Tiada rekod valid. Pastikan ada jarak/odo yang betul.');
+                return;
             }
 
             // Store pending confirmation
@@ -329,10 +310,7 @@ async function handleIncoming(ctx, input, type) {
             }
             
             validResults.forEach((data, idx) => {
-                let distance = data.distance;
-                if (data.odoStart != null && data.odoEnd != null) {
-                    distance = Math.abs(Number(data.odoEnd) - Number(data.odoStart));
-                }
+                const distance = data._calculatedDistance || 0;
                 const claim = distance * rate;
                 
                 const shortDestination = String(data.destination || '').length > 90
@@ -350,13 +328,7 @@ async function handleIncoming(ctx, input, type) {
                 confirmMsg += `   💵 RM ${claim.toFixed(2)}\n\n`;
             });
 
-            const totalKm = validResults.reduce((sum, d) => {
-                let dist = d.distance;
-                if (d.odoStart != null && d.odoEnd != null) {
-                    dist = Math.abs(Number(d.odoEnd) - Number(d.odoStart));
-                }
-                return sum + dist;
-            }, 0);
+            const totalKm = validResults.reduce((sum, d) => sum + (d._calculatedDistance || 0), 0);
             const totalClaim = totalKm * rate;
 
             confirmMsg += `*Total:* ${totalKm.toFixed(1)} km | RM ${totalClaim.toFixed(2)}`;
