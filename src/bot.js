@@ -414,10 +414,12 @@ bot.on('callback_query', async (ctx) => {
             saved = true;
             pendingConfirmations.delete(confirmId);
         } catch (err) {
-            console.error('Confirm Save Error:', err.message);
-            await logError('confirm_save', err.stack || err.message);
-            await ctx.answerCbQuery('❌ Error simpan');
-            await ctx.editMessageText(`❌ Ada error masa simpan.\n\nDetail: ${String(err.message).slice(0, 300)}`);
+            console.error('Confirm Save Error:', err.message, err.stack);
+            try { await logError('confirm_save', err.stack || err.message); } catch (_) {}
+            try { await ctx.answerCbQuery('❌ Error simpan'); } catch (_) {}
+            try { await ctx.editMessageText(`❌ Ada error masa simpan.\n\nDetail: ${String(err.message).slice(0, 300)}`); } catch (_) {
+                try { await ctx.reply(`❌ Ada error masa simpan.\n\nDetail: ${String(err.message).slice(0, 300)}`); } catch (_) {}
+            }
             return;
         }
 
