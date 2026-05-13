@@ -6,16 +6,24 @@ dotenv.config();
 
 const MILEAGE_HEADERS = ['Date', 'Week', 'Destination', 'Odo Start', 'Odo End', 'Distance (km)', 'Claim (RM)', 'Logged At'];
 
+function getRequiredEnv(name) {
+    const value = process.env[name];
+    if (!value) {
+        throw new Error(`${name} is not configured`);
+    }
+    return value;
+}
+
 function getAuth() {
     return new JWT({
-        email: process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL,
-        key: process.env.GOOGLE_PRIVATE_KEY.replace(/\\n/g, '\n'),
+        email: getRequiredEnv('GOOGLE_SERVICE_ACCOUNT_EMAIL'),
+        key: getRequiredEnv('GOOGLE_PRIVATE_KEY').replace(/\\n/g, '\n'),
         scopes: ['https://www.googleapis.com/auth/spreadsheets'],
     });
 }
 
 async function getSheet() {
-    const doc = new GoogleSpreadsheet(process.env.GOOGLE_MILEAGE_SHEET_ID, getAuth());
+    const doc = new GoogleSpreadsheet(getRequiredEnv('GOOGLE_MILEAGE_SHEET_ID'), getAuth());
     await doc.loadInfo();
     let sheet = doc.sheetsByIndex[0];
     try {
@@ -62,6 +70,24 @@ async function logMileage(data) {
     return { distance, claim };
 }
 
+async function getMileageSummary() {
+    const sheet = await getSheet();
+    const rows = await sheet.getRows();
+    const now = new Date();
+    const currentMonth = now.getMonth();
+    const currentYear = now.getFullYear();
+
+    const monthlyRows = rows.filter(r => {
+        const rowDate = new Date(r.get('Date'));
+        return rowDate.getMonth() === currentMonth && rowDate.getFullYear() === currentYear;
+    });
+
+    const totalKm = monthlyRows.reduce((sum, r) => sum + (parseFloat(r.get('Distance (km)')) || 0), 0);
+    const totalClaim = monthlyRows.reduce((sum, r) => sum + (parseFloat(r.get('Claim (RM)')) || 0), 0);
+
+    return { totalKm, totalClaim, count: monthlyRows.length };
+}
+
 async function getWeeklySummary() {
     const sheet = await getSheet();
     const rows = await sheet.getRows();
@@ -81,8 +107,12 @@ async function getMonthlyReport() {
     const rows = await sheet.getRows();
     const now = new Date();
     const currentMonth = now.getMonth();
+    const currentYear = now.getFullYear();
     
-    const monthlyRows = rows.filter(r => new Date(r.get('Date')).getMonth() === currentMonth);
+    const monthlyRows = rows.filter(r => {
+        const rowDate = new Date(r.get('Date'));
+        return rowDate.getMonth() === currentMonth && rowDate.getFullYear() === currentYear;
+    });
     
     // Group by week
     const weeks = {};
@@ -96,4 +126,4 @@ async function getMonthlyReport() {
     return weeks;
 }
 
-module.exports = { logMileage, getWeeklySummary, getMonthlyReport };
+module.exports = { logMileage, getMileageSummary, getWeeklySummary, getMonthlyReport };

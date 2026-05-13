@@ -1,0 +1,30 @@
+services:
+  - type: web
+    name: mileage-bot
+    env: node
+    plan: free
+    buildCommand: npm install
+    startCommand: npm start
+    healthCheckPath: /health
+    autoDeploy: true
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: 8080
+      - key: TELEGRAM_MILEAGE_BOT_TOKEN
+        sync: false
+      - key: MY_CHAT_ID
+        sync: false
+      - key: OPENROUTER_API_KEY
+        sync: false
+      - key: GOOGLE_SERVICE_ACCOUNT_EMAIL
+        sync: false
+      - key: GOOGLE_PRIVATE_KEY
+        sync: false
+      - key: GOOGLE_MILEAGE_SHEET_ID
+        sync: false
+      - key: MILEAGE_RATE
+        value: 0.60
+      - key: RENDER_EXTERNAL_URL
+        sync: false

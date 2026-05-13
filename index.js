@@ -5,40 +5,51 @@ const PORT = process.env.PORT || 8080;
 const RENDER_URL = process.env.RENDER_EXTERNAL_URL;
 
 const server = http.createServer((req, res) => {
-    // Better Health Check
-    if (req.method === 'GET' && (req.url === '/' || req.url === '/health' || req.url === '/ping')) {
-        res.writeHead(200, { 'Content-Type': 'text/plain' });
-        res.end('AI Mileage Bot is Online and Healthy 🚀');
-        return;
-    }
-
-    if (req.method === 'POST') {
+    if (req.url === '/health') {
+        res.writeHead(200);
+        res.end('OK');
+    } else if (req.method === 'POST') {
         bot.webhookCallback('/')(req, res);
     } else {
-        res.writeHead(404);
-        res.end();
+        res.writeHead(200);
+        res.end('AI Mileage Bot is Running');
     }
 });
 
-if (RENDER_URL) {
-    console.log(`🚀 AI Mileage starting in WEBHOOK mode on ${RENDER_URL}`);
-    bot.telegram.setWebhook(`${RENDER_URL}/`);
-    server.listen(PORT, () => {
-        console.log(`✨ Mileage Bot is listening on port ${PORT}`);
-    });
-} else {
-    console.log('🚀 AI Mileage starting in POLLING mode...');
-    bot.launch()
-        .then(() => console.log('✨ Mileage Bot is online (Polling)!'))
-        .catch(err => console.error('❌ Launch failed:', err));
-    
-    server.listen(PORT);
+const commands = [
+    { command: 'start', description: 'Mula guna bot' },
+    { command: 'status', description: 'Check bot online/offline' },
+    { command: 'summary', description: 'Ringkasan mileage bulan ini' },
+    { command: 'weekly', description: 'Ringkasan minggu ini' },
+    { command: 'report', description: 'Laporan bulanan ikut minggu' },
+    { command: 'rate', description: 'Check kadar claim per km' }
+];
+
+async function startBot() {
+    await bot.telegram.setMyCommands(commands);
+    console.log('✅ Telegram command menu updated');
+
+    if (RENDER_URL) {
+        console.log(`🚀 AI Mileage starting in WEBHOOK mode on ${RENDER_URL}`);
+        await bot.telegram.setWebhook(`${RENDER_URL}/`);
+        server.listen(PORT, () => console.log(`✨ Mileage Bot listening on port ${PORT}`));
+    } else {
+        console.log('🚀 AI Mileage starting in POLLING mode...');
+        await bot.launch();
+        server.listen(PORT, () => console.log(`✨ Mileage Bot listening on port ${PORT}`));
+    }
 }
+
+startBot().catch(err => {
+    console.error('❌ Failed to start bot:', err.message);
+    process.exit(1);
+});
 
 process.once('SIGINT', () => {
     bot.stop('SIGINT');
     server.close();
 });
+
 process.once('SIGTERM', () => {
     bot.stop('SIGTERM');
     server.close();
