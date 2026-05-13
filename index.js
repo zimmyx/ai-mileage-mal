@@ -26,23 +26,22 @@ const commands = [
 ];
 
 async function startBot() {
+    server.listen(PORT, () => console.log(`✨ Mileage Bot listening on port ${PORT}`));
+
     await bot.telegram.setMyCommands(commands);
     console.log('✅ Telegram command menu updated');
 
     if (RENDER_URL) {
         console.log(`🚀 AI Mileage starting in WEBHOOK mode on ${RENDER_URL}`);
         await bot.telegram.setWebhook(`${RENDER_URL}/`);
-        server.listen(PORT, () => console.log(`✨ Mileage Bot listening on port ${PORT}`));
     } else {
         console.log('🚀 AI Mileage starting in POLLING mode...');
         await bot.launch();
-        server.listen(PORT, () => console.log(`✨ Mileage Bot listening on port ${PORT}`));
     }
 }
 
 startBot().catch(err => {
     console.error('❌ Failed to start bot:', err.message);
-    process.exit(1);
 });
 
 process.once('SIGINT', () => {
