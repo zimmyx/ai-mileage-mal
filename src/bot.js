@@ -56,11 +56,11 @@ bot.start((ctx) => {
         'Log perjalanan anda sepantas kilat!\n\n' +
         '✍️ *Teks:* "Office ke KLCC 30km"\n' +
         '📝 Hantar rekod mileage dalam bentuk text sahaja.\n\n' +
-        '📊 /summary — Lihat total claim bulan ni\n' +
+        '📊 /summary — Total claim bulan ni (atau `/summary 2026-02`)\n' +
         '📅 /weekly — Lihat total minggu ni\n' +
         '🗓️ /today — Lihat total hari ini\n' +
-        '🧾 /report — Laporan bulanan ikut minggu\n' +
-        '📤 /export — Export laporan PDF\n' +
+        '🧾 /report — Laporan ikut minggu (atau `/report 2026-02`)\n' +
+        '📤 /export — Export PDF (atau `/export 2026-02`)\n' +
         '✏️ /editlast — Edit rekod terakhir\n' +
         '🗑️ /undo — Padam rekod terakhir\n' +
         '⚙️ /rate — Cek kadar claim per km\n' +
@@ -94,9 +94,12 @@ bot.command('help', (ctx) => {
 
 bot.command('summary', async (ctx) => {
     try {
-        const summary = await getMileageSummary();
+        const args = ctx.message.text.split(' ');
+        const month = args.length > 1 ? args[1] : null;
+        const summary = await getMileageSummary(month);
+        const label = month || 'Bulan Ini';
         await ctx.reply(
-            `📊 *Ringkasan Mileage Bulan Ini:*\n\n` +
+            `📊 *Ringkasan Mileage ${label}:*\n\n` +
             `🛣️ Jumlah Jarak: *${summary.totalKm.toFixed(1)} km*\n` +
             `💵 Total Claim: *RM ${summary.totalClaim.toFixed(2)}*\n` +
             `📝 Jumlah Trip: *${summary.count}*`,
@@ -105,7 +108,7 @@ bot.command('summary', async (ctx) => {
     } catch (err) {
         console.error('Summary Error:', err.message);
         await logError('summary', err.message);
-        await ctx.reply('❌ Gagal ambil summary. Sila cuba lagi nanti.');
+        await ctx.reply('❌ Gagal ambil summary. Sila cuba lagi nanti.\n\nFormat: `/summary 2026-02`', { parse_mode: 'Markdown' });
     }
 });
 
@@ -487,19 +490,22 @@ bot.command('weekly', async (ctx) => {
 
 bot.command('report', async (ctx) => {
     try {
-        const report = await getMonthlyReport();
-        let msg = `📊 *Laporan Mileage Bulanan (Ikut Minggu):*\n\n`;
+        const args = ctx.message.text.split(' ');
+        const month = args.length > 1 ? args[1] : null;
+        const report = await getMonthlyReport(month);
+        const label = month || 'Bulan Ini';
+        let msg = `📊 *Laporan Mileage ${label} (Ikut Minggu):*\n\n`;
         
         Object.keys(report).sort().forEach(w => {
             msg += `🔹 *${w}*\n   Jarak: ${report[w].km.toFixed(1)} km\n   Claim: RM ${report[w].rm.toFixed(2)}\n\n`;
         });
 
-        if (Object.keys(report).length === 0) msg = "❌ Tiada data untuk bulan ini.";
+        if (Object.keys(report).length === 0) msg = `❌ Tiada data untuk ${label}.`;
         await ctx.reply(msg, { parse_mode: 'Markdown' });
     } catch (err) {
         console.error('Report Error:', err.message);
         await logError('report', err.message);
-        await ctx.reply('❌ Gagal ambil monthly report. Sila cuba lagi nanti.');
+        await ctx.reply('❌ Gagal ambil monthly report.\n\nFormat: `/report 2026-02`', { parse_mode: 'Markdown' });
     }
 });
 

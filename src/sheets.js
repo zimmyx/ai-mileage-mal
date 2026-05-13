@@ -176,8 +176,8 @@ async function logMileageBatch(records) {
     return successCount;
 }
 
-async function getMileageSummary() {
-    const rows = await getMonthlyRows();
+async function getMileageSummary(month = null) {
+    const rows = await getMonthlyRows(month);
     return summarizeRows(rows);
 }
 
