@@ -1,11 +1,43 @@
-const { Telegraf } = require('telegraf');
+const { Telegraf, Markup } = require('telegraf');
 const { processMileage } = require('./ai');
-const { logMileage, getMileageSummary, getWeeklySummary, getMonthlyReport } = require('./sheets');
+const { 
+    logMileage, 
+    getMileageSummary, 
+    getWeeklySummary, 
+    getMonthlyReport,
+    getTodaySummary,
+    deleteLastRecord,
+    deleteRecordByRow,
+    logError
+} = require('./sheets');
+const { generatePDF } = require('./export');
 const dotenv = require('dotenv');
 
 dotenv.config();
 
 const bot = new Telegraf(process.env.TELEGRAM_MILEAGE_BOT_TOKEN);
+
+// Whitelist check
+const ALLOWED_CHAT_IDS = process.env.ALLOWED_CHAT_IDS 
+    ? process.env.ALLOWED_CHAT_IDS.split(',').map(id => id.trim())
+    : [];
+
+function isAllowed(chatId) {
+    if (ALLOWED_CHAT_IDS.length === 0) return true;
+    return ALLOWED_CHAT_IDS.includes(String(chatId));
+}
+
+// Middleware for whitelist
+bot.use(async (ctx, next) => {
+    if (!isAllowed(ctx.chat?.id)) {
+        await ctx.reply('❌ Anda tidak dibenarkan menggunakan bot ini.');
+        return;
+    }
+    return next();
+});
+
+// Pending confirmations storage
+const pendingConfirmations = new Map();
 
 bot.start((ctx) => {
     ctx.reply(
@@ -15,9 +47,33 @@ bot.start((ctx) => {
         '📝 Hantar rekod mileage dalam bentuk text sahaja.\n\n' +
         '📊 /summary — Lihat total claim bulan ni\n' +
         '📅 /weekly — Lihat total minggu ni\n' +
+        '🗓️ /today — Lihat total hari ini\n' +
         '🧾 /report — Laporan bulanan ikut minggu\n' +
+        '📤 /export — Export laporan PDF\n' +
+        '🗑️ /undo — Padam rekod terakhir\n' +
         '⚙️ /rate — Cek kadar claim per km\n' +
+        '❓ /help — Panduan format input\n' +
         '✅ /status — Check bot online/offline',
+        { parse_mode: 'Markdown' }
+    );
+});
+
+bot.command('help', (ctx) => {
+    ctx.reply(
+        '📖 *Panduan Format Input*\n\n' +
+        '*Format 1: Jarak sahaja*\n' +
+        '`Office ke KLCC 30km`\n\n' +
+        '*Format 2: Dengan tarikh*\n' +
+        '`13/5/2026\nOffice ke Shah Alam 45km`\n\n' +
+        '*Format 3: Dengan odometer*\n' +
+        '`Hari ini pergi JKR\nOdo 12000 - 12045`\n\n' +
+        '*Format 4: Batch multiple trips*\n' +
+        '`10/5 Office 30km\n11/5 Client site 25km\n12/5 JKR 40km`\n\n' +
+        '*Tips:*\n' +
+        '• Bot faham Bahasa Melayu, English, dan Manglish\n' +
+        '• Jika tiada tarikh, bot guna tarikh hari ini\n' +
+        '• Boleh sebut lokasi seperti Spg 3, Spg 4, JKR, client site\n' +
+        '• Bot akan minta confirmation sebelum simpan',
         { parse_mode: 'Markdown' }
     );
 });
@@ -34,7 +90,25 @@ bot.command('summary', async (ctx) => {
         );
     } catch (err) {
         console.error('Summary Error:', err.message);
+        await logError('summary', err.message);
         await ctx.reply('❌ Gagal ambil summary. Sila cuba lagi nanti.');
+    }
+});
+
+bot.command('today', async (ctx) => {
+    try {
+        const summary = await getTodaySummary();
+        await ctx.reply(
+            `📅 *Mileage Hari Ini:*\n\n` +
+            `🛣️ Total Jarak: *${summary.totalKm.toFixed(1)} km*\n` +
+            `💵 Total Claim: *RM ${summary.totalClaim.toFixed(2)}*\n` +
+            `📝 Jumlah Trip: *${summary.count}*`,
+            { parse_mode: 'Markdown' }
+        );
+    } catch (err) {
+        console.error('Today Error:', err.message);
+        await logError('today', err.message);
+        await ctx.reply('❌ Gagal ambil data hari ini. Sila cuba lagi nanti.');
     }
 });
 
@@ -50,9 +124,81 @@ bot.command('status', async (ctx) => {
         `⏰ Masa: *${now}*\n` +
         `🤖 Mode: *${process.env.RENDER_EXTERNAL_URL ? 'Webhook' : 'Polling'}*\n` +
         `📊 Sheets: *Configured*\n` +
-        `🧠 AI: *OpenRouter fallback enabled*`,
+        `🧠 AI: *OpenRouter fallback enabled*\n` +
+        `🔒 Whitelist: *${ALLOWED_CHAT_IDS.length > 0 ? 'Enabled' : 'Disabled'}*`,
         { parse_mode: 'Markdown' }
     );
+});
+
+bot.command('undo', async (ctx) => {
+    try {
+        const deleted = await deleteLastRecord();
+        if (deleted) {
+            await ctx.reply(
+                `✅ *Rekod Terakhir Dipadam*\n\n` +
+                `📍 Destinasi: *${deleted.destination}*\n` +
+                `🛣️ Jarak: *${deleted.distance} km*\n` +
+                `💵 Claim: *RM ${deleted.claim}*`,
+                { parse_mode: 'Markdown' }
+            );
+        } else {
+            await ctx.reply('❌ Tiada rekod untuk dipadam.');
+        }
+    } catch (err) {
+        console.error('Undo Error:', err.message);
+        await logError('undo', err.message);
+        await ctx.reply('❌ Gagal padam rekod. Sila cuba lagi nanti.');
+    }
+});
+
+bot.command('delete', async (ctx) => {
+    const args = ctx.message.text.split(' ');
+    if (args.length < 2 || isNaN(args[1])) {
+        await ctx.reply('❌ Format salah. Guna: `/delete <row_number>`\n\nContoh: `/delete 25`', { parse_mode: 'Markdown' });
+        return;
+    }
+
+    const rowNumber = parseInt(args[1]);
+    try {
+        const deleted = await deleteRecordByRow(rowNumber);
+        if (deleted) {
+            await ctx.reply(
+                `✅ *Rekod Row ${rowNumber} Dipadam*\n\n` +
+                `📍 Destinasi: *${deleted.destination}*\n` +
+                `🛣️ Jarak: *${deleted.distance} km*\n` +
+                `💵 Claim: *RM ${deleted.claim}*`,
+                { parse_mode: 'Markdown' }
+            );
+        } else {
+            await ctx.reply(`❌ Row ${rowNumber} tidak dijumpai.`);
+        }
+    } catch (err) {
+        console.error('Delete Error:', err.message);
+        await logError('delete', err.message);
+        await ctx.reply('❌ Gagal padam rekod. Sila cuba lagi nanti.');
+    }
+});
+
+bot.command('export', async (ctx) => {
+    try {
+        const msg = await ctx.reply('⏳ Menjana laporan PDF...');
+        
+        const args = ctx.message.text.split(' ');
+        const month = args.length > 1 ? args[1] : null;
+        
+        const pdfBuffer = await generatePDF(month);
+        
+        await ctx.telegram.deleteMessage(ctx.chat.id, msg.message_id);
+        
+        await ctx.replyWithDocument(
+            { source: pdfBuffer, filename: `mileage-report-${month || 'current'}.pdf` },
+            { caption: `📄 Laporan Mileage ${month || 'Bulan Ini'}` }
+        );
+    } catch (err) {
+        console.error('Export Error:', err.message);
+        await logError('export', err.message);
+        await ctx.reply('❌ Gagal export PDF. Sila cuba lagi nanti.');
+    }
 });
 
 async function handleIncoming(ctx, input, type) {
@@ -69,32 +215,169 @@ async function handleIncoming(ctx, input, type) {
         const results = await processMileage(normalizedInput, type);
         
         if (results && results.length > 0) {
-            let successCount = 0;
+            // Validate results
+            const validResults = [];
             for (const data of results) {
-                if (data.distance || (data.odoStart && data.odoEnd)) {
-                    await logMileage(data);
-                    successCount++;
+                // Validation
+                if (!data.destination || data.destination.trim() === '') {
+                    await ctx.telegram.editMessageText(
+                        ctx.chat.id, 
+                        msg.message_id, 
+                        null, 
+                        '❌ Destinasi tidak boleh kosong. Sila cuba lagi.'
+                    );
+                    return;
                 }
+
+                let distance = data.distance;
+                if (data.odoStart != null && data.odoEnd != null) {
+                    distance = Math.abs(Number(data.odoEnd) - Number(data.odoStart));
+                    
+                    if (Number(data.odoEnd) < Number(data.odoStart)) {
+                        await ctx.telegram.editMessageText(
+                            ctx.chat.id, 
+                            msg.message_id, 
+                            null, 
+                            '❌ Odo End tidak boleh lebih kecil dari Odo Start. Sila semak semula.'
+                        );
+                        return;
+                    }
+                }
+
+                if (distance > 1000) {
+                    await ctx.telegram.editMessageText(
+                        ctx.chat.id, 
+                        msg.message_id, 
+                        null, 
+                        `❌ Jarak terlalu besar (${distance} km). Maksimum 1000km. Sila semak semula.`
+                    );
+                    return;
+                }
+
+                if (distance <= 0) {
+                    await ctx.telegram.editMessageText(
+                        ctx.chat.id, 
+                        msg.message_id, 
+                        null, 
+                        '❌ Jarak mesti lebih besar dari 0. Sila cuba lagi.'
+                    );
+                    return;
+                }
+
+                validResults.push(data);
             }
 
-            const firstResult = results[0];
-            const firstDistance = firstResult.odoStart != null && firstResult.odoEnd != null
-                ? Math.abs(Number(firstResult.odoEnd) - Number(firstResult.odoStart))
-                : Number(firstResult.distance || 0);
+            // Store pending confirmation
+            const confirmId = `${ctx.chat.id}-${Date.now()}`;
+            pendingConfirmations.set(confirmId, validResults);
 
-            const summary = results.length > 1
-                ? `✅ *Batch Berjaya!* \n📦 *${successCount}* rekod telah disimpan ke Google Sheet.`
-                : `✅ *Mileage Direkod!* \n📍 Destinasi: *${firstResult.destination || 'Unknown'}*\n🛣️ Jarak: *${firstDistance.toFixed(1)} km*`;
+            // Build confirmation message
+            const rate = parseFloat(process.env.MILEAGE_RATE) || 0.60;
+            let confirmMsg = '📋 *Sila Confirm Rekod Mileage:*\n\n';
+            
+            validResults.forEach((data, idx) => {
+                let distance = data.distance;
+                if (data.odoStart != null && data.odoEnd != null) {
+                    distance = Math.abs(Number(data.odoEnd) - Number(data.odoStart));
+                }
+                const claim = distance * rate;
+                
+                confirmMsg += `*${idx + 1}.* ${data.date || 'Hari ini'}\n`;
+                confirmMsg += `   📍 ${data.destination}\n`;
+                if (data.odoStart != null && data.odoEnd != null) {
+                    confirmMsg += `   🔢 Odo: ${data.odoStart} → ${data.odoEnd}\n`;
+                }
+                confirmMsg += `   🛣️ ${distance.toFixed(1)} km\n`;
+                confirmMsg += `   💵 RM ${claim.toFixed(2)}\n\n`;
+            });
 
-            await ctx.telegram.editMessageText(ctx.chat.id, msg.message_id, null, summary, { parse_mode: 'Markdown' });
+            const totalKm = validResults.reduce((sum, d) => {
+                let dist = d.distance;
+                if (d.odoStart != null && d.odoEnd != null) {
+                    dist = Math.abs(Number(d.odoEnd) - Number(d.odoStart));
+                }
+                return sum + dist;
+            }, 0);
+            const totalClaim = totalKm * rate;
+
+            confirmMsg += `*Total:* ${totalKm.toFixed(1)} km | RM ${totalClaim.toFixed(2)}`;
+
+            await ctx.telegram.editMessageText(
+                ctx.chat.id,
+                msg.message_id,
+                null,
+                confirmMsg,
+                {
+                    parse_mode: 'Markdown',
+                    reply_markup: {
+                        inline_keyboard: [
+                            [
+                                { text: '✅ Confirm', callback_data: `confirm:${confirmId}` },
+                                { text: '❌ Cancel', callback_data: `cancel:${confirmId}` }
+                            ]
+                        ]
+                    }
+                }
+            );
+
+            // Auto-expire after 5 minutes
+            setTimeout(() => {
+                pendingConfirmations.delete(confirmId);
+            }, 5 * 60 * 1000);
+
         } else {
             await ctx.telegram.editMessageText(ctx.chat.id, msg.message_id, null, '❌ Gagal membaca format. Sila pastikan tarikh, destinasi dan jarak/odo jelas.');
         }
     } catch (err) {
         console.error('Handle Incoming Error:', err.message);
+        await logError('handleIncoming', err.message);
         await ctx.telegram.editMessageText(ctx.chat.id, msg.message_id, null, '❌ Ada error masa proses mileage. Sila cuba lagi nanti.');
     }
 }
+
+// Handle confirmation callbacks
+bot.on('callback_query', async (ctx) => {
+    const data = ctx.callbackQuery.data;
+    const [action, confirmId] = data.split(':');
+
+    if (action === 'cancel') {
+        pendingConfirmations.delete(confirmId);
+        await ctx.answerCbQuery('❌ Dibatalkan');
+        await ctx.editMessageText('❌ Rekod mileage dibatalkan.');
+        return;
+    }
+
+    if (action === 'confirm') {
+        const results = pendingConfirmations.get(confirmId);
+        if (!results) {
+            await ctx.answerCbQuery('⚠️ Confirmation expired atau sudah diproses');
+            await ctx.editMessageText('⚠️ Confirmation expired. Sila hantar semula.');
+            return;
+        }
+
+        try {
+            let successCount = 0;
+            for (const data of results) {
+                await logMileage(data);
+                successCount++;
+            }
+
+            pendingConfirmations.delete(confirmId);
+
+            const summary = results.length > 1
+                ? `✅ *Batch Berjaya!*\n📦 *${successCount}* rekod telah disimpan ke Google Sheet.`
+                : `✅ *Mileage Direkod!*\n📍 Destinasi: *${results[0].destination}*`;
+
+            await ctx.answerCbQuery('✅ Berjaya disimpan!');
+            await ctx.editMessageText(summary, { parse_mode: 'Markdown' });
+        } catch (err) {
+            console.error('Confirm Error:', err.message);
+            await logError('confirm', err.message);
+            await ctx.answerCbQuery('❌ Error');
+            await ctx.editMessageText('❌ Ada error masa simpan. Sila cuba lagi nanti.');
+        }
+    }
+});
 
 bot.command('weekly', async (ctx) => {
     try {
@@ -108,6 +391,7 @@ bot.command('weekly', async (ctx) => {
         );
     } catch (err) {
         console.error('Weekly Error:', err.message);
+        await logError('weekly', err.message);
         await ctx.reply('❌ Gagal ambil weekly summary. Sila cuba lagi nanti.');
     }
 });
@@ -125,6 +409,7 @@ bot.command('report', async (ctx) => {
         await ctx.reply(msg, { parse_mode: 'Markdown' });
     } catch (err) {
         console.error('Report Error:', err.message);
+        await logError('report', err.message);
         await ctx.reply('❌ Gagal ambil monthly report. Sila cuba lagi nanti.');
     }
 });
@@ -141,6 +426,7 @@ cron.schedule('0 21 * * 5', async () => {
         await bot.telegram.sendMessage(process.env.MY_CHAT_ID, '🔔 *Peringatan Jumaat Malam!*\n\nBos, jangan lupa masukkan rekod odo untuk minggu ni supaya tak terlepas claim! 🚗💨', { parse_mode: 'Markdown' });
     } catch (err) {
         console.error('Friday Reminder Error:', err.message);
+        await logError('friday_reminder', err.message);
     }
 }, { timezone: "Asia/Kuala_Lumpur" });
 
@@ -149,6 +435,7 @@ bot.on('text', async (ctx) => {
     if (text.startsWith('/')) return;
     await handleIncoming(ctx, text, 'text');
 });
+
 bot.on('voice', async (ctx) => {
     await ctx.reply('🎤 Voice message belum disokong. Sila hantar rekod mileage dalam bentuk text. Contoh: "Office ke KLCC 30km"');
 });
