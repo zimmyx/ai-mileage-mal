@@ -99,11 +99,14 @@ async function findDuplicate(data) {
     }) || null;
 }
 
-async function logMileage(data) {
-    const sheet = await getSheet();
+async function logMileage(data, options = {}) {
+    const sheet = options.sheet || await getSheet();
     const rate = parseFloat(process.env.MILEAGE_RATE) || 0.60;
-    const enriched = await enrichWithOdoMemory(data);
-    const distance = calculateDistance(enriched);
+    let enriched = data;
+    if (!options.skipEnrich) {
+        enriched = await enrichWithOdoMemory(data);
+    }
+    const distance = data._calculatedDistance || calculateDistance(enriched);
     const claim = distance * rate;
     const dateStr = enriched.date || getMalaysiaDateString();
     
@@ -118,6 +121,19 @@ async function logMileage(data) {
         'Logged At': new Date().toLocaleString('en-GB', { timeZone: 'Asia/Kuala_Lumpur' })
     });
     return { distance, claim, data: enriched };
+}
+
+async function logMileageBatch(records) {
+    const sheet = await getSheet();
+    let successCount = 0;
+    for (const data of records) {
+        await logMileage(data, { sheet, skipEnrich: true });
+        successCount++;
+        if (records.length > 5 && successCount < records.length) {
+            await new Promise(r => setTimeout(r, 300));
+        }
+    }
+    return successCount;
 }
 
 async function getMileageSummary() {
@@ -242,7 +258,7 @@ async function logError(module, error) {
 }
 
 module.exports = {
-    logMileage, getMileageSummary, getWeeklySummary, getMonthlyReport, getTodaySummary,
+    logMileage, logMileageBatch, getMileageSummary, getWeeklySummary, getMonthlyReport, getTodaySummary,
     getMonthlyRows, deleteLastRecord, deleteRecordByRow, editLastRecord, logError,
     calculateDistance, getLastOdoEnd, enrichWithOdoMemory, findDuplicate, hasRecordsThisWeek
 };

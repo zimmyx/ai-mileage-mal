@@ -1,8 +1,9 @@
 const { Telegraf, Markup } = require('telegraf');
 const { processMileage } = require('./ai');
-const { 
-    logMileage, 
-    getMileageSummary, 
+const {
+    logMileage,
+    logMileageBatch,
+    getMileageSummary,
     getWeeklySummary, 
     getMonthlyReport,
     getTodaySummary,
@@ -395,9 +396,11 @@ bot.on('callback_query', async (ctx) => {
 
         try {
             let successCount = 0;
-            for (const data of results) {
-                await logMileage(data);
-                successCount++;
+            if (results.length > 1) {
+                successCount = await logMileageBatch(results);
+            } else {
+                await logMileage(results[0]);
+                successCount = 1;
             }
 
             pendingConfirmations.delete(confirmId);
