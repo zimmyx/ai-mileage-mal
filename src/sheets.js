@@ -13,35 +13,50 @@ function getRequiredEnv(name) {
     return value;
 }
 
+function formatPrivateKey(rawKey) {
+    let key = rawKey;
+    
+    // 1. Remove surrounding quotes
+    key = key.replace(/^["']|["']$/g, '');
+    
+    // 2. Replace literal \n with actual newlines
+    key = key.replace(/\\n/g, '\n');
+    
+    // 3. Normalize line endings
+    key = key.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
+    
+    // 4. If key is all on one line (no newlines between BEGIN and END), reconstruct PEM
+    const lines = key.split('\n').map(l => l.trim()).filter(Boolean);
+    if (lines.length <= 3 && key.includes('-----BEGIN')) {
+        // Extract the base64 content between BEGIN and END
+        const match = key.match(/-----BEGIN[^-]*-----(.+?)-----END[^-]*-----/s);
+        if (match) {
+            const b64 = match[1].replace(/\s/g, '');
+            // Rebuild proper PEM with 64-char lines
+            const chunks = b64.match(/.{1,64}/g) || [];
+            key = '-----BEGIN PRIVATE KEY-----\n' + chunks.join('\n') + '\n-----END PRIVATE KEY-----\n';
+        }
+    }
+    
+    // 5. Ensure it ends with newline
+    if (!key.endsWith('\n')) key += '\n';
+    
+    return key;
+}
+
 function getAuth() {
-    let rawKey = getRequiredEnv('GOOGLE_PRIVATE_KEY');
+    const rawKey = getRequiredEnv('GOOGLE_PRIVATE_KEY');
+    const key = formatPrivateKey(rawKey);
     
-    // Handle various key formats:
-    // 1. Literal \n strings (from Render dashboard copy-paste)
-    if (rawKey.includes('\\n')) {
-        rawKey = rawKey.replace(/\\n/g, '\n');
-    }
-    
-    // 2. Remove any extra quotes that might have been added
-    rawKey = rawKey.replace(/^["']|["']$/g, '');
-    
-    // 3. Normalize line endings (CRLF -> LF)
-    rawKey = rawKey.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
-    
-    // 4. Ensure proper PEM format with newlines
-    if (!rawKey.includes('\n') && rawKey.includes('-----BEGIN')) {
-        // Key is all on one line, need to add newlines
-        rawKey = rawKey
-            .replace('-----BEGIN PRIVATE KEY-----', '-----BEGIN PRIVATE KEY-----\n')
-            .replace('-----END PRIVATE KEY-----', '\n-----END PRIVATE KEY-----')
-            .replace(/(.{64})/g, '$1\n')  // Add newline every 64 chars
-            .replace(/\n+/g, '\n')  // Remove duplicate newlines
-            .trim();
-    }
+    // Debug: log key format info on startup
+    const hasBegin = key.includes('-----BEGIN');
+    const hasEnd = key.includes('-----END');
+    const lineCount = key.split('\n').filter(Boolean).length;
+    console.log(`[Auth] Key format: BEGIN=${hasBegin}, END=${hasEnd}, lines=${lineCount}`);
     
     return new JWT({
         email: getRequiredEnv('GOOGLE_SERVICE_ACCOUNT_EMAIL'),
-        key: rawKey,
+        key,
         scopes: ['https://www.googleapis.com/auth/spreadsheets'],
     });
 }
