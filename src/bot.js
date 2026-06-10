@@ -56,69 +56,57 @@ function escapeMarkdown(text) {
 
 bot.start(async (ctx) => {
     const webAppUrl = process.env.RENDER_EXTERNAL_URL || 'https://dashboard.render.com';
-    try {
-        await ctx.replyWithPhoto(
-            { source: path.join(__dirname, '../assets/banner.png') },
-            {
-                caption: '🏢 *Sistem Rekod Mileage AI*\n\n' +
-                         'Selamat datang! Sila pilih menu di bawah atau hantar mesej teks (contoh: `Office ke KLCC 30km`) untuk merekod mileage anda.',
-                parse_mode: 'Markdown',
-                reply_markup: {
-                    inline_keyboard: [
-                        [
-                            { text: '📊 Hari Ini', callback_data: 'menu_today' },
-                            { text: '📈 Mingguan', callback_data: 'menu_weekly' }
-                        ],
-                        [
-                            { text: '🧾 Bulanan', callback_data: 'menu_summary' },
-                            { text: '📁 Muat Turun PDF', callback_data: 'menu_export' }
-                        ],
-                        [
-                            { text: '🌐 BUKA DASHBOARD MINI APP', web_app: { url: webAppUrl } }
-                        ],
-                        [
-                            { text: '⚙️ Bantuan Format Teks', callback_data: 'menu_help' }
-                        ]
-                    ]
-                }
-            }
-        );
-    } catch (e) {
-        // Fallback if image fails
-        await ctx.reply('🏢 *Sistem Rekod Mileage AI*\n\nSelamat datang! Sila pilih dari menu di bawah.', {
+    await ctx.reply(
+        '🏢 *AI Mileage Tracking System*\n\n' +
+        'Welcome! I am your automated assistant, designed to seamlessly log and manage your mileage claims.\n\n' +
+        '💡 *How to Log a Trip:*\n' +
+        'Simply send a brief text message in the chat:\n' +
+        '📝 `Office to KLCC 30km`\n\n' +
+        'Please select an option below or send your trip details:',
+        {
             parse_mode: 'Markdown',
             reply_markup: {
                 inline_keyboard: [
-                    [{ text: '📊 Hari Ini', callback_data: 'menu_today' }, { text: '📈 Mingguan', callback_data: 'menu_weekly' }],
-                    [{ text: '🧾 Bulanan', callback_data: 'menu_summary' }, { text: '📁 Muat Turun PDF', callback_data: 'menu_export' }],
-                    [{ text: '🌐 BUKA DASHBOARD MINI APP', web_app: { url: webAppUrl } }],
-                    [{ text: '⚙️ Bantuan Format Teks', callback_data: 'menu_help' }]
+                    [
+                        { text: '📊 Today\'s Report', callback_data: 'menu_today' },
+                        { text: '📈 Weekly Report', callback_data: 'menu_weekly' }
+                    ],
+                    [
+                        { text: '🧾 Monthly Summary', callback_data: 'menu_summary' },
+                        { text: '📁 Export PDF', callback_data: 'menu_export' }
+                    ],
+                    [
+                        { text: '🌐 OPEN MINI APP', web_app: { url: webAppUrl } }
+                    ],
+                    [
+                        { text: '⚙️ Formatting Guide', callback_data: 'menu_help' }
+                    ]
                 ]
             }
-        });
-    }
+        }
+    );
 });
 
 bot.command('help', (ctx) => {
     ctx.reply(
-        '📖 *PANDUAN FORMAT TEKS*\n' +
-        'Anda boleh menaip secara natural. Berikut adalah contoh yang disokong:\n\n' +
-        '*1. Teks Biasa (Paling Mudah)*\n' +
-        '`Office ke JKR 30km`\n\n' +
-        '*2. Teks Bersama Tarikh*\n' +
+        '📖 *TEXT FORMATTING GUIDE*\n' +
+        'You can type naturally. Here are the supported formats:\n\n' +
+        '*1. Standard Text (Easiest)*\n' +
+        '`Office to Site A 30km`\n\n' +
+        '*2. Text with Date*\n' +
         '`13/5/2026`\n' +
-        '`Office ke Tapak Projek 45km`\n\n' +
-        '*3. Menggunakan Odometer*\n' +
-        '`Hari ini ke KLCC`\n' +
+        '`Office to Project Site 45km`\n\n' +
+        '*3. Using Odometer Readings*\n' +
+        '`Today to KLCC`\n' +
         '`Odo 12000 - 12045`\n\n' +
-        '*4. Odometer Bersambung (Odo Memory)*\n' +
-        '`Spg 4 Cheng odo 12080`\n' +
-        '_*Bot akan guna Odo akhir sebelumnya sebagai Odo mula automatik._\n\n' +
-        '*Arahan Tambahan:*\n' +
-        '• `/editlast distance 35` — Edit jarak rekod terakhir\n' +
-        '• `/editlast destination KLCC` — Edit destinasi terakhir\n' +
-        '• `/undo` — Padam rekod terakhir\n' +
-        '• `/delete 25` — Padam rekod baris ke-25',
+        '*4. Continuous Odometer (Memory)*\n' +
+        '`Junction 4 Cheng odo 12080`\n' +
+        '_*The bot will automatically use your previous End Odo as the new Start Odo._\n\n' +
+        '*Additional Commands:*\n' +
+        '• `/editlast distance 35` — Edit distance of the last record\n' +
+        '• `/editlast destination KLCC` — Edit destination of the last record\n' +
+        '• `/undo` — Delete the last record\n' +
+        '• `/delete 25` — Delete the record on row 25',
         { parse_mode: 'Markdown' }
     );
 });
@@ -130,11 +118,11 @@ bot.command('summary', async (ctx) => {
         const summary = await getMileageSummary(month);
         const label = month || 'Bulan Ini';
         await ctx.reply(
-            `📊 *LAPORAN MILEAGE (${label})*\n` +
+            `📊 *MILEAGE REPORT (${label})*\n` +
             `━━━━━━━━━━━━━━━━━━━━\n` +
-            `🛣️ Jarak Keseluruhan: *${summary.totalKm.toFixed(1)} km*\n` +
-            `💰 Jumlah Tuntutan: *RM ${summary.totalClaim.toFixed(2)}*\n` +
-            `📝 Jumlah Rekod: *${summary.count} Perjalanan*`,
+            `🛣️ Total Distance: *${summary.totalKm.toFixed(1)} km*\n` +
+            `💰 Total Claim: *RM ${summary.totalClaim.toFixed(2)}*\n` +
+            `📝 Total Records: *${summary.count} Trips*`,
             { parse_mode: 'Markdown' }
         );
     } catch (err) {
@@ -170,13 +158,13 @@ bot.command('rate', (ctx) => {
 bot.command('status', async (ctx) => {
     const now = new Date().toLocaleString('en-GB', { timeZone: 'Asia/Kuala_Lumpur' });
     await ctx.reply(
-        `🟢 *STATUS SISTEM*\n` +
+        `🟢 *SYSTEM STATUS*\n` +
         `━━━━━━━━━━━━━━━━━━━━\n` +
-        `⏰ Waktu Semasa: *${now}*\n` +
-        `🤖 Mod Operasi: *${process.env.RENDER_EXTERNAL_URL ? 'Webhook' : 'Polling'}*\n` +
-        `📊 Google Sheets: *Aktif*\n` +
+        `⏰ Current Time: *${now}*\n` +
+        `🤖 Operating Mode: *${process.env.RENDER_EXTERNAL_URL ? 'Webhook' : 'Polling'}*\n` +
+        `📊 Google Sheets: *Active*\n` +
         `🧠 AI Parser: *OpenRouter fallback enabled*\n` +
-        `🔒 Akses: *${ALLOWED_CHAT_IDS.length > 0 ? 'Terhad (Whitelist)' : 'Terbuka (Public)'}*`,
+        `🔒 Access: *${ALLOWED_CHAT_IDS.length > 0 ? 'Restricted (Whitelist)' : 'Open (Public)'}*`,
         { parse_mode: 'Markdown' }
     );
 });
@@ -186,27 +174,27 @@ bot.command('undo', async (ctx) => {
         const deleted = await deleteLastRecord();
         if (deleted) {
             await ctx.reply(
-                `✅ *REKOD TERAKHIR BERJAYA DIPADAM*\n` +
+                `✅ *LATEST RECORD DELETED*\n` +
                 `━━━━━━━━━━━━━━━━━━━━\n` +
-                `📍 Destinasi: *${escapeMarkdown(deleted.destination)}*\n` +
-                `🛣️ Jarak: *${deleted.distance} km*\n` +
-                `💰 Tuntutan: *RM ${deleted.claim}*`,
+                `📍 Destination: *${escapeMarkdown(deleted.destination)}*\n` +
+                `🛣️ Distance: *${deleted.distance} km*\n` +
+                `💰 Claim Amount: *RM ${deleted.claim}*`,
                 { parse_mode: 'Markdown' }
             );
         } else {
-            await ctx.reply('❌ Tiada rekod untuk dipadam.');
+            await ctx.reply('❌ No records found to delete.');
         }
     } catch (err) {
         console.error('Undo Error:', err.message);
         await logError('undo', err.message);
-        await ctx.reply('❌ Gagal padam rekod. Sila cuba lagi nanti.');
+        await ctx.reply('❌ Failed to delete record. Please try again later.');
     }
 });
 
 bot.command('delete', async (ctx) => {
     const args = ctx.message.text.split(' ');
     if (args.length < 2 || isNaN(args[1])) {
-        await ctx.reply('❌ Format salah. Guna: `/delete <row_number>`\n\nContoh: `/delete 25`', { parse_mode: 'Markdown' });
+        await ctx.reply('❌ Invalid format. Usage: `/delete <row_number>`\n\nExample: `/delete 25`', { parse_mode: 'Markdown' });
         return;
     }
 
@@ -215,20 +203,20 @@ bot.command('delete', async (ctx) => {
         const deleted = await deleteRecordByRow(rowNumber);
         if (deleted) {
             await ctx.reply(
-                `✅ *REKOD (BARIS ${rowNumber}) BERJAYA DIPADAM*\n` +
+                `✅ *RECORD (ROW ${rowNumber}) DELETED*\n` +
                 `━━━━━━━━━━━━━━━━━━━━\n` +
-                `📍 Destinasi: *${escapeMarkdown(deleted.destination)}*\n` +
-                `🛣️ Jarak: *${deleted.distance} km*\n` +
-                `💰 Tuntutan: *RM ${deleted.claim}*`,
+                `📍 Destination: *${escapeMarkdown(deleted.destination)}*\n` +
+                `🛣️ Distance: *${deleted.distance} km*\n` +
+                `💰 Claim Amount: *RM ${deleted.claim}*`,
                 { parse_mode: 'Markdown' }
             );
         } else {
-            await ctx.reply(`❌ Row ${rowNumber} tidak dijumpai.`);
+            await ctx.reply(`❌ Row ${rowNumber} not found.`);
         }
     } catch (err) {
         console.error('Delete Error:', err.message);
         await logError('delete', err.message);
-        await ctx.reply('❌ Gagal padam rekod. Sila cuba lagi nanti.');
+        await ctx.reply('❌ Failed to delete record. Please try again later.');
     }
 });
 
@@ -236,7 +224,7 @@ bot.command('editlast', async (ctx) => {
     const parts = ctx.message.text.split(' ');
     if (parts.length < 3) {
         await ctx.reply(
-            '❌ Format salah. Guna:\n\n' +
+            '❌ Invalid format. Usage:\n\n' +
             '`/editlast distance 35`\n' +
             '`/editlast destination KLCC`\n' +
             '`/editlast date 2026-05-13`\n' +
@@ -252,29 +240,29 @@ bot.command('editlast', async (ctx) => {
     try {
         const updated = await editLastRecord(field, value);
         if (!updated) {
-            await ctx.reply('❌ Tiada rekod untuk diedit.');
+            await ctx.reply('❌ No record found to edit.');
             return;
         }
         await ctx.reply(
-            `✅ *REKOD TERAKHIR TELAH DIKEMASKINI*\n` +
+            `✅ *LATEST RECORD UPDATED*\n` +
             `━━━━━━━━━━━━━━━━━━━━\n` +
-            `✏️ Ruangan: *${escapeMarkdown(field)}*\n` +
-            `🆕 Nilai Baru: *${escapeMarkdown(value)}*\n\n` +
-            `📍 Destinasi: *${escapeMarkdown(updated.destination)}*\n` +
-            `🛣️ Jarak: *${updated.distance} km*\n` +
-            `💰 Tuntutan: *RM ${updated.claim}*`,
+            `✏️ Field: *${escapeMarkdown(field)}*\n` +
+            `🆕 New Value: *${escapeMarkdown(value)}*\n\n` +
+            `📍 Destination: *${escapeMarkdown(updated.destination)}*\n` +
+            `🛣️ Distance: *${updated.distance} km*\n` +
+            `💰 Claim Amount: *RM ${updated.claim}*`,
             { parse_mode: 'Markdown' }
         );
     } catch (err) {
         console.error('Edit Last Error:', err.message);
         await logError('editlast', err.message);
-        await ctx.reply('❌ Gagal edit rekod. Field dibenarkan: distance, destination, date, odostart, odoend.');
+        await ctx.reply('❌ Failed to edit record. Allowed fields: distance, destination, date, odostart, odoend.');
     }
 });
 
 bot.command('export', async (ctx) => {
     try {
-        const msg = await ctx.reply('⏳ Menjana laporan PDF...');
+        const msg = await ctx.reply('⏳ Generating PDF report...');
         
         const args = ctx.message.text.split(' ');
         const month = args.length > 1 ? args[1] : null;
@@ -285,12 +273,12 @@ bot.command('export', async (ctx) => {
         
         await ctx.replyWithDocument(
             { source: pdfBuffer, filename: `mileage-report-${month || 'current'}.pdf` },
-            { caption: `📄 Laporan Mileage ${month || 'Bulan Ini'}` }
+            { caption: `📄 Mileage Report: ${month || 'This Month'}` }
         );
     } catch (err) {
         console.error('Export Error:', err.message);
         await logError('export', err.message);
-        await ctx.reply('❌ Gagal export PDF. Sila cuba lagi nanti.');
+        await ctx.reply('❌ Failed to export PDF. Please try again later.');
     }
 });
 
@@ -298,11 +286,11 @@ async function handleIncoming(ctx, input, type) {
     const normalizedInput = typeof input === 'string' ? input.trim() : '';
 
     if (!normalizedInput) {
-        await ctx.reply('❌ Sila hantar rekod mileage dalam bentuk text yang jelas.');
+        await ctx.reply('❌ Sila hantar rekod mileage dalam format teks yang jelas.');
         return;
     }
 
-    const msg = await ctx.reply('⏳ Memproses Batch Mileage...');
+    const msg = await ctx.reply('⏳ Sedang memproses Batch Mileage...');
 
     try {
         const results = await processMileage(normalizedInput, type);
@@ -341,7 +329,7 @@ async function handleIncoming(ctx, input, type) {
             }
 
             if (validResults.length === 0) {
-                await ctx.telegram.editMessageText(ctx.chat.id, msg.message_id, null, '❌ Tiada rekod valid. Pastikan ada jarak/odo yang betul.');
+                await ctx.telegram.editMessageText(ctx.chat.id, msg.message_id, null, '❌ No valid records found. Please ensure distance/odometer readings are correct.');
                 return;
             }
 
@@ -351,9 +339,9 @@ async function handleIncoming(ctx, input, type) {
 
             // Build confirmation message
             const rate = parseFloat(process.env.MILEAGE_RATE) || 0.60;
-            let confirmMsg = '📝 *PENGESAHAN REKOD PERJALANAN*\nSila semak butiran di bawah sebelum menyimpan:\n\n';
+            let confirmMsg = '📝 *TRIP CONFIRMATION*\nPlease review the details below before saving:\n\n';
             if (validResults.some(d => d._duplicateWarning)) {
-                confirmMsg += '⚠️ *AMARAN:* Ada rekod yang mungkin bertindih (duplicate). Sila semak dengan teliti.\n\n';
+                confirmMsg += '⚠️ *WARNING:* Possible duplicate records detected. Please review carefully.\n\n';
             }
             
             validResults.forEach((data, idx) => {
@@ -364,28 +352,28 @@ async function handleIncoming(ctx, input, type) {
                 const shortDestination = rawDest.length > 90
                     ? rawDest.slice(0, 87) + '...'
                     : rawDest;
-                confirmMsg += `*${idx + 1}. [${data.date || 'Hari ini'}]*\n`;
-                confirmMsg += `   📍 Destinasi: ${escapeMarkdown(shortDestination)}\n`;
+                confirmMsg += `*${idx + 1}. [${data.date || 'Today'}]*\n`;
+                confirmMsg += `   📍 Destination: ${escapeMarkdown(shortDestination)}\n`;
                 if (data.odoStart != null && data.odoEnd != null) {
                     confirmMsg += `   🔢 Odometer: ${data.odoStart} ➔ ${data.odoEnd}\n`;
                 }
                 if (data._duplicateWarning) {
-                    confirmMsg += `   ⚠️ (Kemungkinan Duplicate)\n`;
+                    confirmMsg += `   ⚠️ (Possible Duplicate)\n`;
                 }
-                confirmMsg += `   🛣️ Jarak: ${distance.toFixed(1)} km\n`;
-                confirmMsg += `   💰 Tuntutan: RM ${claim.toFixed(2)}\n\n`;
+                confirmMsg += `   🛣️ Distance: ${distance.toFixed(1)} km\n`;
+                confirmMsg += `   💰 Claim Amount: RM ${claim.toFixed(2)}\n\n`;
             });
 
             const totalKm = validResults.reduce((sum, d) => sum + (d._calculatedDistance || 0), 0);
             const totalClaim = totalKm * rate;
 
-            confirmMsg += `━━━━━━━━━━━━━━━━━━━━\n📈 *JUMLAH KESELURUHAN*\nJarak: *${totalKm.toFixed(1)} km*  |  Tuntutan: *RM ${totalClaim.toFixed(2)}*`;
+            confirmMsg += `━━━━━━━━━━━━━━━━━━━━\n📈 *OVERALL SUMMARY*\nDistance: *${totalKm.toFixed(1)} km*  |  Claim: *RM ${totalClaim.toFixed(2)}*`;
 
             if (confirmMsg.length > 3800) {
-                confirmMsg = '📝 *PENGESAHAN REKOD PERJALANAN*\n\n' +
-                    `Bot berjaya membaca *${validResults.length} rekod*.\n` +
-                    `📈 Jumlah Keseluruhan: *${totalKm.toFixed(1)} km* (RM ${totalClaim.toFixed(2)})\n\n` +
-                    '_Nota: Butiran terlalu panjang, tetapi semua rekod sedia untuk disimpan. Anda boleh semak PDF selepas ini._';
+                confirmMsg = '📝 *TRIP CONFIRMATION*\n\n' +
+                    `Successfully processed *${validResults.length} records*.\n` +
+                    `📈 Overall Summary: *${totalKm.toFixed(1)} km* (RM ${totalClaim.toFixed(2)})\n\n` +
+                    '_Note: Details are too long to display, but all records are ready to be saved. You can check the PDF later._';
             }
 
             await ctx.telegram.editMessageText(
@@ -398,8 +386,8 @@ async function handleIncoming(ctx, input, type) {
                     reply_markup: {
                         inline_keyboard: [
                             [
-                                { text: '✅ Sahkan', callback_data: `confirm:${confirmId}` },
-                                { text: '❌ Batal', callback_data: `cancel:${confirmId}` }
+                                { text: '✅ Confirm', callback_data: `confirm:${confirmId}` },
+                                { text: '❌ Cancel', callback_data: `cancel:${confirmId}` }
                             ]
                         ]
                     }
@@ -412,12 +400,12 @@ async function handleIncoming(ctx, input, type) {
             }, 5 * 60 * 1000);
 
         } else {
-            await ctx.telegram.editMessageText(ctx.chat.id, msg.message_id, null, '❌ Gagal membaca format. Sila pastikan tarikh, destinasi dan jarak/odo jelas.');
+            await ctx.telegram.editMessageText(ctx.chat.id, msg.message_id, null, '❌ Failed to read format. Please ensure date, destination, and distance/odometer are clear.');
         }
     } catch (err) {
         console.error('Handle Incoming Error:', err.message);
         await logError('handleIncoming', err.message);
-        await ctx.telegram.editMessageText(ctx.chat.id, msg.message_id, null, '❌ Ada error masa proses mileage. Sila cuba lagi nanti.');
+        await ctx.telegram.editMessageText(ctx.chat.id, msg.message_id, null, '❌ Error processing mileage. Please try again later.');
     }
 }
 
@@ -428,16 +416,16 @@ bot.on('callback_query', async (ctx) => {
 
     if (action === 'cancel') {
         pendingConfirmations.delete(confirmId);
-        await ctx.answerCbQuery('❌ Dibatalkan');
-        await ctx.editMessageText('❌ *Rekod dibatalkan dan tidak disimpan.*', { parse_mode: 'Markdown' });
+        await ctx.answerCbQuery('❌ Cancelled');
+        await ctx.editMessageText('❌ *Record logging cancelled. No data was saved.*', { parse_mode: 'Markdown' });
         return;
     }
 
     if (action === 'confirm') {
         const results = pendingConfirmations.get(confirmId);
         if (!results) {
-            await ctx.answerCbQuery('⚠️ Confirmation expired atau sudah diproses');
-            await ctx.editMessageText('⚠️ Confirmation expired. Sila hantar semula.');
+            await ctx.answerCbQuery('⚠️ Confirmation expired');
+            await ctx.editMessageText('⚠️ Confirmation expired. Please submit the record again.');
             return;
         }
 
@@ -488,18 +476,18 @@ bot.on('callback_query', async (ctx) => {
         }
 
         const summary = results.length > 1
-            ? `✅ *BATCH BERJAYA DISIMPAN!*\n━━━━━━━━━━━━━━━━━━━━\n📦 *${successCount} rekod* telah dikemaskini ke dalam Google Sheets.`
-            : `✅ *REKOD BERJAYA DISIMPAN!*\n━━━━━━━━━━━━━━━━━━━━\n📍 Destinasi: *${escapeMarkdown(results[0].destination)}*`;
+            ? `✅ *BATCH SAVED SUCCESSFULLY!*\n━━━━━━━━━━━━━━━━━━━━\n📦 *${successCount} records* have been added to Google Sheets.`
+            : `✅ *RECORD SAVED SUCCESSFULLY!*\n━━━━━━━━━━━━━━━━━━━━\n📍 Destination: *${escapeMarkdown(results[0].destination)}*`;
 
         try {
-            await ctx.answerCbQuery('✅ Berjaya disimpan!');
+            await ctx.answerCbQuery('✅ Saved successfully!');
             await ctx.editMessageText(summary, { parse_mode: 'Markdown' });
         } catch (err) {
             console.error('Confirm Telegram Reply Error:', err.message);
             await logError('confirm_reply', err.stack || err.message);
             if (saved) {
                 try {
-                    await ctx.reply('✅ Rekod berjaya disimpan ke Google Sheet.');
+                    await ctx.reply('✅ Record successfully saved to Google Sheets.');
                 } catch (replyErr) {
                     console.error('Fallback Reply Error:', replyErr.message);
                 }
@@ -522,7 +510,7 @@ bot.command('weekly', async (ctx) => {
     } catch (err) {
         console.error('Weekly Error:', err.message);
         await logError('weekly', err.message);
-        await ctx.reply('❌ Gagal ambil weekly summary. Sila cuba lagi nanti.');
+        await ctx.reply('❌ Failed to retrieve weekly summary. Please try again later.');
     }
 });
 
@@ -532,18 +520,18 @@ bot.command('report', async (ctx) => {
         const month = args.length > 1 ? args[1] : null;
         const report = await getMonthlyReport(month);
         const label = month || 'Bulan Ini';
-        let msg = `🧾 *LAPORAN TERPERINCI (${label})*\n━━━━━━━━━━━━━━━━━━━━\n\n`;
+        let msg = `🧾 *DETAILED REPORT (${label})*\n━━━━━━━━━━━━━━━━━━━━\n\n`;
         
         Object.keys(report).sort().forEach(w => {
-            msg += `🔹 *${w}*\n   Jarak: ${report[w].km.toFixed(1)} km\n   Tuntutan: RM ${report[w].rm.toFixed(2)}\n\n`;
+            msg += `🔹 *${w}*\n   Distance: ${report[w].km.toFixed(1)} km\n   Claim: RM ${report[w].rm.toFixed(2)}\n\n`;
         });
 
-        if (Object.keys(report).length === 0) msg = `❌ Tiada data untuk ${label}.`;
+        if (Object.keys(report).length === 0) msg = `❌ No data found for ${label}.`;
         await ctx.reply(msg, { parse_mode: 'Markdown' });
     } catch (err) {
         console.error('Report Error:', err.message);
         await logError('report', err.message);
-        await ctx.reply('❌ Gagal ambil monthly report.\n\nFormat: `/report 2026-02`', { parse_mode: 'Markdown' });
+        await ctx.reply('❌ Failed to retrieve monthly report.\n\nFormat: `/report 2026-02`', { parse_mode: 'Markdown' });
     }
 });
 
@@ -561,7 +549,7 @@ cron.schedule('0 21 * * 5', async () => {
             console.log('Friday reminder skipped: weekly mileage already logged.');
             return;
         }
-        await bot.telegram.sendMessage(process.env.MY_CHAT_ID, '🔔 *Peringatan Jumaat Malam!*\n\nMinggu ni belum ada rekod mileage. Jangan lupa masukkan odo/trip supaya tak terlepas claim! 🚗💨', { parse_mode: 'Markdown' });
+        await bot.telegram.sendMessage(process.env.MY_CHAT_ID, '🔔 *Friday Night Reminder!*\n\nNo mileage records found for this week. Don\'t forget to log your odometer/trips so you don\'t miss out on your claims! 🚗💨', { parse_mode: 'Markdown' });
     } catch (err) {
         console.error('Friday Reminder Error:', err.message);
         await logError('friday_reminder', err.message);
@@ -575,7 +563,7 @@ bot.on('text', async (ctx) => {
 });
 
 bot.on('voice', async (ctx) => {
-    await ctx.reply('🎤 Voice message belum disokong. Sila hantar rekod mileage dalam bentuk text. Contoh: "Office ke KLCC 30km"');
+    await ctx.reply('🎤 Voice messages are not supported yet. Please send your mileage records as text. Example: "Office to KLCC 30km"');
 });
 
 // --- Menu Action Handlers ---
@@ -584,15 +572,15 @@ bot.action('menu_today', async (ctx) => {
     try {
         const summary = await getTodaySummary();
         await ctx.reply(
-            `📊 *LAPORAN MILEAGE: HARI INI*\n` +
+            `📊 *MILEAGE REPORT: TODAY*\n` +
             `━━━━━━━━━━━━━━━━━━━━\n` +
-            `🛣️ Jarak Keseluruhan: *${summary.totalKm.toFixed(1)} km*\n` +
-            `💰 Jumlah Tuntutan: *RM ${summary.totalClaim.toFixed(2)}*\n` +
-            `📝 Jumlah Rekod: *${summary.count} Perjalanan*`,
+            `🛣️ Total Distance: *${summary.totalKm.toFixed(1)} km*\n` +
+            `💰 Total Claim: *RM ${summary.totalClaim.toFixed(2)}*\n` +
+            `📝 Total Records: *${summary.count} Trips*`,
             { parse_mode: 'Markdown' }
         );
     } catch (err) {
-        await ctx.reply('❌ Gagal ambil data hari ini.');
+        await ctx.reply('❌ Failed to retrieve today\'s data.');
     }
 });
 
@@ -601,15 +589,15 @@ bot.action('menu_weekly', async (ctx) => {
     try {
         const summary = await getWeeklySummary();
         await ctx.reply(
-            `📊 *LAPORAN MINGGUAN (${summary.week})*\n` +
+            `📊 *WEEKLY REPORT (${summary.week})*\n` +
             `━━━━━━━━━━━━━━━━━━━━\n` +
-            `🛣️ Jarak Keseluruhan: *${summary.totalKm.toFixed(1)} km*\n` +
-            `💰 Jumlah Tuntutan: *RM ${summary.totalClaim.toFixed(2)}*\n` +
-            `📝 Jumlah Rekod: *${summary.count} Perjalanan*`,
+            `🛣️ Total Distance: *${summary.totalKm.toFixed(1)} km*\n` +
+            `💰 Total Claim: *RM ${summary.totalClaim.toFixed(2)}*\n` +
+            `📝 Total Records: *${summary.count} Trips*`,
             { parse_mode: 'Markdown' }
         );
     } catch (err) {
-        await ctx.reply('❌ Gagal ambil ringkasan minggu ini.');
+        await ctx.reply('❌ Failed to retrieve this week\'s summary.');
     }
 });
 
@@ -618,22 +606,22 @@ bot.action('menu_summary', async (ctx) => {
     try {
         const summary = await getMileageSummary(null);
         await ctx.reply(
-            `📊 *LAPORAN MILEAGE (Bulan Ini)*\n` +
+            `📊 *MILEAGE REPORT (This Month)*\n` +
             `━━━━━━━━━━━━━━━━━━━━\n` +
-            `🛣️ Jarak Keseluruhan: *${summary.totalKm.toFixed(1)} km*\n` +
-            `💰 Jumlah Tuntutan: *RM ${summary.totalClaim.toFixed(2)}*\n` +
-            `📝 Jumlah Rekod: *${summary.count} Perjalanan*`,
+            `🛣️ Total Distance: *${summary.totalKm.toFixed(1)} km*\n` +
+            `💰 Total Claim: *RM ${summary.totalClaim.toFixed(2)}*\n` +
+            `📝 Total Records: *${summary.count} Trips*`,
             { parse_mode: 'Markdown' }
         );
     } catch (err) {
-        await ctx.reply('❌ Gagal ambil ringkasan bulan ini.');
+        await ctx.reply('❌ Failed to retrieve this month\'s summary.');
     }
 });
 
 bot.action('menu_export', async (ctx) => {
-    await ctx.answerCbQuery('Menjana PDF...');
+    await ctx.answerCbQuery('Generating PDF...');
     try {
-        await ctx.reply('⏳ Sedang menjana report PDF untuk bulan ini. Sila tunggu...');
+        await ctx.reply('⏳ Generating PDF report for this month. Please wait...');
         const { exportPdf } = require('./export');
         const pdfPath = await exportPdf(null);
         if (pdfPath) {
@@ -641,22 +629,22 @@ bot.action('menu_export', async (ctx) => {
             const fs = require('fs');
             fs.unlinkSync(pdfPath);
         } else {
-            await ctx.reply('❌ Tiada rekod dijumpai untuk diexport.');
+            await ctx.reply('❌ No records found to export.');
         }
     } catch (err) {
-        await ctx.reply('❌ Ralat ketika export PDF.');
+        await ctx.reply('❌ Error generating PDF.');
     }
 });
 
 bot.action('menu_help', async (ctx) => {
     await ctx.answerCbQuery();
     await ctx.reply(
-        '📖 *PANDUAN FORMAT TEKS*\n' +
-        'Anda boleh menaip secara natural. Berikut adalah contoh yang disokong:\n\n' +
-        '*1. Teks Biasa (Paling Mudah)*\n`Office ke JKR 30km`\n\n' +
-        '*2. Teks Bersama Tarikh*\n`13/5/2026`\n`Office ke Tapak Projek 45km`\n\n' +
-        '*3. Menggunakan Odometer*\n`Hari ini ke KLCC`\n`Odo 12000 - 12045`\n\n' +
-        '*4. Odometer Bersambung*\n`Spg 4 Cheng odo 12080`\n',
+        '📖 *TEXT FORMATTING GUIDE*\n' +
+        'You can type naturally. Here are the supported formats:\n\n' +
+        '*1. Standard Text (Easiest)*\n`Office to Site A 30km`\n\n' +
+        '*2. Text with Date*\n`13/5/2026`\n`Office to Project Site 45km`\n\n' +
+        '*3. Using Odometer Readings*\n`Today to KLCC`\n`Odo 12000 - 12045`\n\n' +
+        '*4. Continuous Odometer*\n`Junction 4 Cheng odo 12080`\n',
         { parse_mode: 'Markdown' }
     );
 });

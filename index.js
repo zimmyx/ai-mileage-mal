@@ -98,8 +98,8 @@ function renderDashboard() {
     <div class="container">
         <div class="card">
             <div class="header">
-                <h1>Sistem Mileage AI</h1>
-                <div class="status-badge">● Sistem Aktif</div>
+                <h1>AI Mileage System</h1>
+                <div class="status-badge">● System Active</div>
             </div>
             <div class="grid">
                 <div class="stat-box">
@@ -107,16 +107,16 @@ function renderDashboard() {
                     <div class="stat-value">${uptime}s</div>
                 </div>
                 <div class="stat-box">
-                    <div class="stat-label">Mode API</div>
+                    <div class="stat-label">API Mode</div>
                     <div class="stat-value">${mode}</div>
                 </div>
                 <div class="stat-box" style="grid-column: 1 / -1;">
-                    <div class="stat-label">Waktu Malaysia</div>
+                    <div class="stat-label">Malaysia Time</div>
                     <div class="stat-value">${now}</div>
                 </div>
             </div>
             <div class="footer">
-                Sistem sedang berjalan dan sedia menerima rekod dari Telegram.
+                System is running and ready to receive records from Telegram.
             </div>
         </div>
     </div>
@@ -144,18 +144,18 @@ const server = http.createServer((req, res) => {
 });
 
 const commands = [
-    { command: 'start', description: 'Mula guna bot' },
-    { command: 'help', description: 'Panduan format input' },
-    { command: 'status', description: 'Check bot online/offline' },
-    { command: 'today', description: 'Ringkasan mileage hari ini' },
-    { command: 'summary', description: 'Ringkasan mileage bulan ini' },
-    { command: 'weekly', description: 'Ringkasan minggu ini' },
-    { command: 'report', description: 'Laporan bulanan ikut minggu' },
-    { command: 'export', description: 'Export laporan PDF' },
-    { command: 'editlast', description: 'Edit rekod terakhir' },
-    { command: 'undo', description: 'Padam rekod terakhir' },
-    { command: 'delete', description: 'Padam rekod ikut row number' },
-    { command: 'rate', description: 'Check kadar claim per km' }
+    { command: 'start', description: 'Start using the bot' },
+    { command: 'help', description: 'View formatting guide' },
+    { command: 'status', description: 'Check bot online status' },
+    { command: 'today', description: 'Today\'s mileage summary' },
+    { command: 'summary', description: 'This month\'s summary' },
+    { command: 'weekly', description: 'This week\'s summary' },
+    { command: 'report', description: 'Monthly report by weeks' },
+    { command: 'export', description: 'Export PDF report' },
+    { command: 'editlast', description: 'Edit the last record' },
+    { command: 'undo', description: 'Delete the last record' },
+    { command: 'delete', description: 'Delete record by row number' },
+    { command: 'rate', description: 'Check claim rate per km' }
 ];
 
 async function startBot() {
