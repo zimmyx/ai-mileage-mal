@@ -106,14 +106,10 @@ function calculateDistance(data) {
 
 async function getLastOdoEnd() {
     const sheet = await getSheet();
-    await sheet.loadInfo();
-    const rowCount = sheet.rowCount;
-    if (rowCount <= 1) return null;
+    const rows = await sheet.getRows();
+    if (rows.length === 0) return null;
     
-    const offset = Math.max(0, rowCount - 11);
-    const limit = 10;
-    const rows = await sheet.getRows({ offset, limit });
-    for (let i = rows.length - 1; i >= 0; i--) {
+    for (let i = rows.length - 1; i >= Math.max(0, rows.length - 10); i--) {
         const val = rows[i].get('Odo End');
         if (val && !isNaN(Number(val))) return Number(val);
     }
@@ -132,12 +128,10 @@ async function enrichWithOdoMemory(data) {
 
 async function findDuplicate(data) {
     const sheet = await getSheet();
-    await sheet.loadInfo();
-    const rowCount = sheet.rowCount;
-    if (rowCount <= 1) return null;
+    const rows = await sheet.getRows();
+    if (rows.length === 0) return null;
     
-    const offset = Math.max(0, rowCount - 21);
-    const rows = await sheet.getRows({ offset, limit: 20 });
+    const recentRows = rows.slice(-20);
     const date = data.date || getMalaysiaDateString();
     const distance = calculateDistance(data);
     const dest = String(data.destination || '').toLowerCase().trim();
@@ -266,15 +260,10 @@ function rowToDeleted(row) {
 
 async function deleteLastRecord() {
     const sheet = await getSheet();
-    await sheet.loadInfo();
-    const rowCount = sheet.rowCount;
-    if (rowCount <= 1) return null;
-    
-    const offset = Math.max(0, rowCount - 2);
-    const rows = await sheet.getRows({ offset, limit: 1 });
+    const rows = await sheet.getRows();
     if (rows.length === 0) return null;
     
-    const lastRow = rows[0];
+    const lastRow = rows[rows.length - 1];
     const deleted = rowToDeleted(lastRow);
     await lastRow.delete();
     return deleted;
@@ -282,29 +271,21 @@ async function deleteLastRecord() {
 
 async function deleteRecordByRow(rowNumber) {
     const sheet = await getSheet();
-    const offset = rowNumber - 2;
-    if (offset < 0) return null;
+    const rows = await sheet.getRows();
+    const targetRow = rows.find(r => r.rowNumber === rowNumber);
+    if (!targetRow) return null;
     
-    const rows = await sheet.getRows({ offset, limit: 1 });
-    if (rows.length === 0) return null;
-    
-    const row = rows[0];
-    const deleted = rowToDeleted(row);
-    await row.delete();
+    const deleted = rowToDeleted(targetRow);
+    await targetRow.delete();
     return deleted;
 }
 
 async function editLastRecord(field, value) {
     const sheet = await getSheet();
-    await sheet.loadInfo();
-    const rowCount = sheet.rowCount;
-    if (rowCount <= 1) return null;
-    
-    const offset = Math.max(0, rowCount - 2);
-    const rows = await sheet.getRows({ offset, limit: 1 });
+    const rows = await sheet.getRows();
     if (rows.length === 0) return null;
     
-    const row = rows[0];
+    const row = rows[rows.length - 1];
     const rate = parseFloat(process.env.MILEAGE_RATE) || 0.60;
     const map = { destination: 'Destination', date: 'Date', distance: 'Distance (km)', odostart: 'Odo Start', odoend: 'Odo End' };
     const key = map[String(field).toLowerCase()];
