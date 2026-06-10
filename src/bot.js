@@ -410,8 +410,14 @@ async function handleIncoming(ctx, input, type) {
 }
 
 // Handle confirmation callbacks
-bot.on('callback_query', async (ctx) => {
+bot.on('callback_query', async (ctx, next) => {
     const data = ctx.callbackQuery.data;
+    if (!data) return next();
+
+    if (data.startsWith('menu_')) {
+        return next();
+    }
+
     const [action, confirmId] = data.split(':');
 
     if (action === 'cancel') {
