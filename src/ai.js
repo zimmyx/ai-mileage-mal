@@ -167,11 +167,20 @@ async function processMileage(input, type = 'text') {
 
     const localResult = parseLocal(normalizedInput);
     if (Array.isArray(localResult) && localResult.length > 0) {
-        console.log('Using free local mileage parser');
-        return localResult;
+        const meaningfulLines = normalizedInput.split('\n').filter(l => l.trim().length > 5);
+        // If there are many lines but very few parsed results, local parser likely failed. Fallback to AI.
+        if (meaningfulLines.length > 3 && localResult.length <= meaningfulLines.length / 3) {
+            console.log(`Local parser found only ${localResult.length} trips from ${meaningfulLines.length} lines. Falling back to AI for bulk processing.`);
+        } else {
+            console.log(`Using free local mileage parser. Found ${localResult.length} trips.`);
+            return localResult;
+        }
     }
 
-    if (!OPENROUTER_API_KEY) throw new Error('OPENROUTER_API_KEY is not configured and local parser could not parse input');
+    if (!OPENROUTER_API_KEY) {
+        if (Array.isArray(localResult) && localResult.length > 0) return localResult;
+        throw new Error('OPENROUTER_API_KEY is not configured and local parser could not parse input');
+    }
 
     const today = getToday();
     const prompt = `Act as an expert free mileage parser for a Malaysian traffic light technical support worker.
