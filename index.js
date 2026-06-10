@@ -14,33 +14,111 @@ function renderDashboard() {
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>AI Mileage Bot Status</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Sistem Rekod Mileage AI</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&display=swap" rel="stylesheet">
     <style>
-        body { font-family: Arial, sans-serif; background: #f4f7fb; margin: 0; padding: 30px; color: #222; }
-        .card { max-width: 720px; margin: 0 auto; background: white; border-radius: 16px; padding: 28px; box-shadow: 0 10px 30px rgba(0,0,0,0.08); }
-        h1 { margin-top: 0; color: #1f7a4d; }
-        .status { display: inline-block; padding: 8px 14px; border-radius: 999px; background: #d9fbe8; color: #116b3a; font-weight: bold; }
-        .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-top: 24px; }
-        .item { background: #f8fafc; padding: 14px; border-radius: 12px; }
-        .label { font-size: 12px; color: #64748b; text-transform: uppercase; letter-spacing: .04em; }
-        .value { font-size: 18px; margin-top: 6px; font-weight: bold; }
-        code { background: #eef2ff; padding: 3px 6px; border-radius: 6px; }
-        @media (max-width: 600px) { .grid { grid-template-columns: 1fr; } }
+        * { box-sizing: border-box; }
+        body { 
+            font-family: 'Inter', sans-serif; 
+            margin: 0; padding: 20px; 
+            min-height: 100vh;
+            background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
+            color: #f8fafc;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .container { width: 100%; max-width: 600px; }
+        .card {
+            background: rgba(255, 255, 255, 0.05);
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 24px;
+            padding: 32px;
+            box-shadow: 0 20px 40px rgba(0,0,0,0.4);
+            animation: fadeIn 0.8s ease-out;
+        }
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(20px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        .header { text-align: center; margin-bottom: 32px; }
+        .header h1 {
+            margin: 0;
+            font-size: 28px;
+            font-weight: 800;
+            background: linear-gradient(135deg, #10b981 0%, #3b82f6 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            letter-spacing: -0.5px;
+        }
+        .status-badge {
+            display: inline-block;
+            margin-top: 12px;
+            padding: 6px 16px;
+            border-radius: 50px;
+            background: rgba(16, 185, 129, 0.15);
+            color: #34d399;
+            font-size: 14px;
+            font-weight: 600;
+            border: 1px solid rgba(16, 185, 129, 0.3);
+            box-shadow: 0 0 20px rgba(16, 185, 129, 0.2);
+        }
+        .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+        .stat-box {
+            background: rgba(0, 0, 0, 0.2);
+            border-radius: 16px;
+            padding: 20px;
+            border: 1px solid rgba(255, 255, 255, 0.05);
+            transition: transform 0.3s ease, background 0.3s ease;
+        }
+        .stat-box:hover {
+            transform: translateY(-5px);
+            background: rgba(255, 255, 255, 0.08);
+        }
+        .stat-label {
+            font-size: 13px;
+            color: #94a3b8;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            font-weight: 600;
+            margin-bottom: 8px;
+        }
+        .stat-value { font-size: 22px; font-weight: 800; color: #fff; }
+        .footer { margin-top: 32px; text-align: center; font-size: 14px; color: #64748b; }
+        @media (max-width: 480px) {
+            .grid { grid-template-columns: 1fr; }
+            .card { padding: 24px; }
+        }
     </style>
 </head>
 <body>
-    <div class="card">
-        <h1>🚗 AI Mileage Bot</h1>
-        <span class="status">✅ Online</span>
-        <div class="grid">
-            <div class="item"><div class="label">Mode</div><div class="value">${mode}</div></div>
-            <div class="item"><div class="label">Health</div><div class="value">OK</div></div>
-            <div class="item"><div class="label">Uptime</div><div class="value">${uptime}s</div></div>
-            <div class="item"><div class="label">Malaysia Time</div><div class="value">${now}</div></div>
+    <div class="container">
+        <div class="card">
+            <div class="header">
+                <h1>Sistem Mileage AI</h1>
+                <div class="status-badge">● Sistem Aktif</div>
+            </div>
+            <div class="grid">
+                <div class="stat-box">
+                    <div class="stat-label">Uptime</div>
+                    <div class="stat-value">${uptime}s</div>
+                </div>
+                <div class="stat-box">
+                    <div class="stat-label">Mode API</div>
+                    <div class="stat-value">${mode}</div>
+                </div>
+                <div class="stat-box" style="grid-column: 1 / -1;">
+                    <div class="stat-label">Waktu Malaysia</div>
+                    <div class="stat-value">${now}</div>
+                </div>
+            </div>
+            <div class="footer">
+                Sistem sedang berjalan dan sedia menerima rekod dari Telegram.
+            </div>
         </div>
-        <p style="margin-top:24px;">Health endpoint: <code>/health</code></p>
-        <p>Use Telegram commands: <code>/start</code>, <code>/status</code>, <code>/help</code></p>
     </div>
 </body>
 </html>`;

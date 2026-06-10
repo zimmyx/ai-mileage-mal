@@ -1,4 +1,5 @@
 const { Telegraf, Markup } = require('telegraf');
+const path = require('path');
 const { processMileage } = require('./ai');
 const {
     logMileage,
@@ -53,21 +54,49 @@ function escapeMarkdown(text) {
         .replace(/([_*`\[])/g, '\\$1');
 }
 
-bot.start((ctx) => {
-    ctx.reply(
-        '🏢 *Sistem Rekod Mileage AI*\n\n' +
-        'Selamat datang! Saya di sini untuk membantu anda merekod dan mengurus tuntutan perjalanan (mileage) dengan mudah dan pantas.\n\n' +
-        '💡 *Cara Merekod:*\n' +
-        'Hanya hantar mesej teks ringkas seperti:\n' +
-        '📝 `Office ke KLCC 30km`\n\n' +
-        '📌 *Menu Utama:*\n' +
-        '📊 /today — Semakan Hari Ini\n' +
-        '📈 /weekly — Laporan Mingguan\n' +
-        '🧾 /summary — Laporan Bulanan\n' +
-        '📁 /export — Jana PDF Tuntutan\n' +
-        '⚙️ /help — Bantuan & Format Teks',
-        { parse_mode: 'Markdown' }
-    );
+bot.start(async (ctx) => {
+    const webAppUrl = process.env.RENDER_EXTERNAL_URL || 'https://dashboard.render.com';
+    try {
+        await ctx.replyWithPhoto(
+            { source: path.join(__dirname, '../assets/banner.png') },
+            {
+                caption: '🏢 *Sistem Rekod Mileage AI*\n\n' +
+                         'Selamat datang! Sila pilih menu di bawah atau hantar mesej teks (contoh: `Office ke KLCC 30km`) untuk merekod mileage anda.',
+                parse_mode: 'Markdown',
+                reply_markup: {
+                    inline_keyboard: [
+                        [
+                            { text: '📊 Hari Ini', callback_data: 'menu_today' },
+                            { text: '📈 Mingguan', callback_data: 'menu_weekly' }
+                        ],
+                        [
+                            { text: '🧾 Bulanan', callback_data: 'menu_summary' },
+                            { text: '📁 Muat Turun PDF', callback_data: 'menu_export' }
+                        ],
+                        [
+                            { text: '🌐 BUKA DASHBOARD MINI APP', web_app: { url: webAppUrl } }
+                        ],
+                        [
+                            { text: '⚙️ Bantuan Format Teks', callback_data: 'menu_help' }
+                        ]
+                    ]
+                }
+            }
+        );
+    } catch (e) {
+        // Fallback if image fails
+        await ctx.reply('🏢 *Sistem Rekod Mileage AI*\n\nSelamat datang! Sila pilih dari menu di bawah.', {
+            parse_mode: 'Markdown',
+            reply_markup: {
+                inline_keyboard: [
+                    [{ text: '📊 Hari Ini', callback_data: 'menu_today' }, { text: '📈 Mingguan', callback_data: 'menu_weekly' }],
+                    [{ text: '🧾 Bulanan', callback_data: 'menu_summary' }, { text: '📁 Muat Turun PDF', callback_data: 'menu_export' }],
+                    [{ text: '🌐 BUKA DASHBOARD MINI APP', web_app: { url: webAppUrl } }],
+                    [{ text: '⚙️ Bantuan Format Teks', callback_data: 'menu_help' }]
+                ]
+            }
+        });
+    }
 });
 
 bot.command('help', (ctx) => {
@@ -547,6 +576,89 @@ bot.on('text', async (ctx) => {
 
 bot.on('voice', async (ctx) => {
     await ctx.reply('🎤 Voice message belum disokong. Sila hantar rekod mileage dalam bentuk text. Contoh: "Office ke KLCC 30km"');
+});
+
+// --- Menu Action Handlers ---
+bot.action('menu_today', async (ctx) => {
+    await ctx.answerCbQuery();
+    try {
+        const summary = await getTodaySummary();
+        await ctx.reply(
+            `📊 *LAPORAN MILEAGE: HARI INI*\n` +
+            `━━━━━━━━━━━━━━━━━━━━\n` +
+            `🛣️ Jarak Keseluruhan: *${summary.totalKm.toFixed(1)} km*\n` +
+            `💰 Jumlah Tuntutan: *RM ${summary.totalClaim.toFixed(2)}*\n` +
+            `📝 Jumlah Rekod: *${summary.count} Perjalanan*`,
+            { parse_mode: 'Markdown' }
+        );
+    } catch (err) {
+        await ctx.reply('❌ Gagal ambil data hari ini.');
+    }
+});
+
+bot.action('menu_weekly', async (ctx) => {
+    await ctx.answerCbQuery();
+    try {
+        const summary = await getWeeklySummary();
+        await ctx.reply(
+            `📊 *LAPORAN MINGGUAN (${summary.week})*\n` +
+            `━━━━━━━━━━━━━━━━━━━━\n` +
+            `🛣️ Jarak Keseluruhan: *${summary.totalKm.toFixed(1)} km*\n` +
+            `💰 Jumlah Tuntutan: *RM ${summary.totalClaim.toFixed(2)}*\n` +
+            `📝 Jumlah Rekod: *${summary.count} Perjalanan*`,
+            { parse_mode: 'Markdown' }
+        );
+    } catch (err) {
+        await ctx.reply('❌ Gagal ambil ringkasan minggu ini.');
+    }
+});
+
+bot.action('menu_summary', async (ctx) => {
+    await ctx.answerCbQuery();
+    try {
+        const summary = await getMileageSummary(null);
+        await ctx.reply(
+            `📊 *LAPORAN MILEAGE (Bulan Ini)*\n` +
+            `━━━━━━━━━━━━━━━━━━━━\n` +
+            `🛣️ Jarak Keseluruhan: *${summary.totalKm.toFixed(1)} km*\n` +
+            `💰 Jumlah Tuntutan: *RM ${summary.totalClaim.toFixed(2)}*\n` +
+            `📝 Jumlah Rekod: *${summary.count} Perjalanan*`,
+            { parse_mode: 'Markdown' }
+        );
+    } catch (err) {
+        await ctx.reply('❌ Gagal ambil ringkasan bulan ini.');
+    }
+});
+
+bot.action('menu_export', async (ctx) => {
+    await ctx.answerCbQuery('Menjana PDF...');
+    try {
+        await ctx.reply('⏳ Sedang menjana report PDF untuk bulan ini. Sila tunggu...');
+        const { exportPdf } = require('./export');
+        const pdfPath = await exportPdf(null);
+        if (pdfPath) {
+            await ctx.replyWithDocument({ source: pdfPath, filename: path.basename(pdfPath) });
+            const fs = require('fs');
+            fs.unlinkSync(pdfPath);
+        } else {
+            await ctx.reply('❌ Tiada rekod dijumpai untuk diexport.');
+        }
+    } catch (err) {
+        await ctx.reply('❌ Ralat ketika export PDF.');
+    }
+});
+
+bot.action('menu_help', async (ctx) => {
+    await ctx.answerCbQuery();
+    await ctx.reply(
+        '📖 *PANDUAN FORMAT TEKS*\n' +
+        'Anda boleh menaip secara natural. Berikut adalah contoh yang disokong:\n\n' +
+        '*1. Teks Biasa (Paling Mudah)*\n`Office ke JKR 30km`\n\n' +
+        '*2. Teks Bersama Tarikh*\n`13/5/2026`\n`Office ke Tapak Projek 45km`\n\n' +
+        '*3. Menggunakan Odometer*\n`Hari ini ke KLCC`\n`Odo 12000 - 12045`\n\n' +
+        '*4. Odometer Bersambung*\n`Spg 4 Cheng odo 12080`\n',
+        { parse_mode: 'Markdown' }
+    );
 });
 
 module.exports = { bot };
