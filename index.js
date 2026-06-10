@@ -46,12 +46,19 @@ function renderDashboard() {
 </html>`;
 }
 
+const WEBHOOK_SECRET = process.env.WEBHOOK_SECRET || 'mileage-secret-token-123';
+
 const server = http.createServer((req, res) => {
     if (req.url === '/health') {
         res.writeHead(200, { 'Content-Type': 'text/plain' });
         res.end('OK');
     } else if (req.method === 'POST') {
-        bot.webhookCallback('/')(req, res);
+        if (req.headers['x-telegram-bot-api-secret-token'] === WEBHOOK_SECRET) {
+            bot.webhookCallback('/')(req, res);
+        } else {
+            res.writeHead(403, { 'Content-Type': 'text/plain' });
+            res.end('Forbidden');
+        }
     } else {
         res.writeHead(200, { 'Content-Type': 'text/html' });
         res.end(renderDashboard());
@@ -81,7 +88,7 @@ async function startBot() {
 
     if (RENDER_URL) {
         console.log(`🚀 AI Mileage starting in WEBHOOK mode on ${RENDER_URL}`);
-        await bot.telegram.setWebhook(`${RENDER_URL}/`);
+        await bot.telegram.setWebhook(`${RENDER_URL}/`, { secret_token: WEBHOOK_SECRET });
     } else {
         console.log('🚀 AI Mileage starting in POLLING mode...');
         await bot.launch();

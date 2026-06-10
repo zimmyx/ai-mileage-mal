@@ -106,7 +106,13 @@ function calculateDistance(data) {
 
 async function getLastOdoEnd() {
     const sheet = await getSheet();
-    const rows = await sheet.getRows();
+    await sheet.loadInfo();
+    const rowCount = sheet.rowCount;
+    if (rowCount <= 1) return null;
+    
+    const offset = Math.max(0, rowCount - 11);
+    const limit = 10;
+    const rows = await sheet.getRows({ offset, limit });
     for (let i = rows.length - 1; i >= 0; i--) {
         const val = rows[i].get('Odo End');
         if (val && !isNaN(Number(val))) return Number(val);
@@ -126,7 +132,12 @@ async function enrichWithOdoMemory(data) {
 
 async function findDuplicate(data) {
     const sheet = await getSheet();
-    const rows = await sheet.getRows();
+    await sheet.loadInfo();
+    const rowCount = sheet.rowCount;
+    if (rowCount <= 1) return null;
+    
+    const offset = Math.max(0, rowCount - 21);
+    const rows = await sheet.getRows({ offset, limit: 20 });
     const date = data.date || getMalaysiaDateString();
     const distance = calculateDistance(data);
     const dest = String(data.destination || '').toLowerCase().trim();
@@ -165,15 +176,27 @@ async function logMileage(data, options = {}) {
 
 async function logMileageBatch(records) {
     const sheet = await getSheet();
-    let successCount = 0;
+    const rate = parseFloat(process.env.MILEAGE_RATE) || 0.60;
+    
+    const rowsToAdd = [];
     for (const data of records) {
-        await logMileage(data, { sheet, skipEnrich: true });
-        successCount++;
-        if (records.length > 5 && successCount < records.length) {
-            await new Promise(r => setTimeout(r, 300));
-        }
+        const distance = data._calculatedDistance || calculateDistance(data);
+        const claim = distance * rate;
+        const dateStr = data.date || getMalaysiaDateString();
+        rowsToAdd.push({
+            'Date': dateStr,
+            'Week': getWeekNumber(dateStr),
+            'Destination': data.destination || 'Unknown',
+            'Odo Start': data.odoStart || '',
+            'Odo End': data.odoEnd || '',
+            'Distance (km)': distance,
+            'Claim (RM)': claim.toFixed(2),
+            'Logged At': new Date().toLocaleString('en-GB', { timeZone: 'Asia/Kuala_Lumpur' })
+        });
     }
-    return successCount;
+
+    await sheet.addRows(rowsToAdd);
+    return records.length;
 }
 
 async function getMileageSummary(month = null) {
@@ -243,9 +266,15 @@ function rowToDeleted(row) {
 
 async function deleteLastRecord() {
     const sheet = await getSheet();
-    const rows = await sheet.getRows();
+    await sheet.loadInfo();
+    const rowCount = sheet.rowCount;
+    if (rowCount <= 1) return null;
+    
+    const offset = Math.max(0, rowCount - 2);
+    const rows = await sheet.getRows({ offset, limit: 1 });
     if (rows.length === 0) return null;
-    const lastRow = rows[rows.length - 1];
+    
+    const lastRow = rows[0];
     const deleted = rowToDeleted(lastRow);
     await lastRow.delete();
     return deleted;
@@ -253,10 +282,13 @@ async function deleteLastRecord() {
 
 async function deleteRecordByRow(rowNumber) {
     const sheet = await getSheet();
-    const rows = await sheet.getRows();
-    const dataIndex = rowNumber - 2;
-    if (dataIndex < 0 || dataIndex >= rows.length) return null;
-    const row = rows[dataIndex];
+    const offset = rowNumber - 2;
+    if (offset < 0) return null;
+    
+    const rows = await sheet.getRows({ offset, limit: 1 });
+    if (rows.length === 0) return null;
+    
+    const row = rows[0];
     const deleted = rowToDeleted(row);
     await row.delete();
     return deleted;
@@ -264,9 +296,15 @@ async function deleteRecordByRow(rowNumber) {
 
 async function editLastRecord(field, value) {
     const sheet = await getSheet();
-    const rows = await sheet.getRows();
+    await sheet.loadInfo();
+    const rowCount = sheet.rowCount;
+    if (rowCount <= 1) return null;
+    
+    const offset = Math.max(0, rowCount - 2);
+    const rows = await sheet.getRows({ offset, limit: 1 });
     if (rows.length === 0) return null;
-    const row = rows[rows.length - 1];
+    
+    const row = rows[0];
     const rate = parseFloat(process.env.MILEAGE_RATE) || 0.60;
     const map = { destination: 'Destination', date: 'Date', distance: 'Distance (km)', odostart: 'Odo Start', odoend: 'Odo End' };
     const key = map[String(field).toLowerCase()];
